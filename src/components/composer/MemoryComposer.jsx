@@ -1,4 +1,4 @@
-import { useReducer, useCallback, useEffect } from "react";
+import { useReducer, useCallback, useEffect, useState } from "react";
 import {
   composerReducer,
   initialComposerState,
@@ -8,6 +8,9 @@ import {
 } from "./composer-state";
 import { interpolateLineWaypoints } from "./route-builder";
 import PlacePicker from "./PlacePicker";
+import GpxImporter from "./GpxImporter";
+import PhotoDrop from "./PhotoDrop";
+import NarrationRecorder from "./NarrationRecorder";
 
 /**
  * Memory Composer — Slice A scaffold (v3.1).
@@ -33,14 +36,34 @@ export default function MemoryComposer({ onPreview, onCancel }) {
   const setOrigin = useCallback((v) => dispatch({ type: COMPOSER_ACTIONS.SET_ORIGIN, payload: v }), []);
   const setDestination = useCallback((v) => dispatch({ type: COMPOSER_ACTIONS.SET_DESTINATION, payload: v }), []);
 
-  // When both endpoints are set, auto-interpolate a 10-point great-circle-ish
-  // path so the composer is immediately previewable. Slice C overrides this
-  // with imported GPX track data.
+  // Tracks whether the user imported a GPX file. Once they have, we stop
+  // auto-overwriting waypoints from the A→B endpoints.
+  const [gpxImported, setGpxImported] = useState(false);
+
+  // When both endpoints are set (and no GPX is loaded), auto-interpolate a
+  // 10-point great-circle-ish path so the composer is immediately previewable.
   useEffect(() => {
+    if (gpxImported) return;
     if (!state.origin || !state.destination) return;
     const wps = interpolateLineWaypoints(state.origin, state.destination, 10);
     dispatch({ type: COMPOSER_ACTIONS.SET_WAYPOINTS, payload: wps });
-  }, [state.origin, state.destination]);
+  }, [state.origin, state.destination, gpxImported]);
+
+  const handleGpxImport = useCallback((pts, name) => {
+    dispatch({ type: COMPOSER_ACTIONS.SET_WAYPOINTS, payload: pts });
+    setGpxImported(true);
+    // Promote endpoints from the GPX if user hasn't picked any.
+    if (!state.origin && pts.length > 0) {
+      dispatch({ type: COMPOSER_ACTIONS.SET_ORIGIN, payload: { name: `${name || "Track"} start`, lat: pts[0].lat, lon: pts[0].lon } });
+    }
+    if (!state.destination && pts.length > 1) {
+      const last = pts[pts.length - 1];
+      dispatch({ type: COMPOSER_ACTIONS.SET_DESTINATION, payload: { name: `${name || "Track"} end`, lat: last.lat, lon: last.lon } });
+    }
+    if (name && !state.title) {
+      dispatch({ type: COMPOSER_ACTIONS.SET_TITLE, payload: name });
+    }
+  }, [state.origin, state.destination, state.title]);
 
   const handlePreview = () => {
     const cfg = toLocationConfig(state);
@@ -99,17 +122,15 @@ export default function MemoryComposer({ onPreview, onCancel }) {
           />
         </div>
 
-        <div className="composer-placeholder" data-testid="composer-gpx-import">
-          <p className="composer-hint">GPX import — Slice C</p>
-        </div>
+        <GpxImporter onImport={handleGpxImport} />
 
-        <div className="composer-placeholder" data-testid="composer-photo-drop">
-          <p className="composer-hint">Photo drop — Slice D</p>
-        </div>
+        <PhotoDrop
+          onLandmark={(lm) => dispatch({ type: COMPOSER_ACTIONS.ADD_LANDMARK, payload: lm })}
+        />
 
-        <div className="composer-placeholder" data-testid="composer-narration">
-          <p className="composer-hint">Narration — Slice E</p>
-        </div>
+        <NarrationRecorder
+          onRecorded={(u) => dispatch({ type: COMPOSER_ACTIONS.SET_NARRATION, payload: u })}
+        />
 
         <div className="composer-summary" aria-live="polite">
           {ready
