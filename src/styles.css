@@ -948,3 +948,33 @@ body {
 .narration-controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .narration-audio { height: 32px; }
 .composer-error { color: #a23522; }
+
+/* Export panel + AI scaffold (Slices F + G) */
+.export-panel, .ai-scaffold {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.export-canvas { display: none; }
+.export-download {
+  display: inline-block;
+  padding: 8px 14px;
+  color: #8a4528;
+  text-decoration: none;
+  border: 1px solid rgba(138, 69, 40, 0.4);
+  border-radius: 4px;
+  font-size: 14px;
+  align-self: flex-start;
+}
+.export-download:hover { background: rgba(138, 69, 40, 0.06); }
+.ai-scaffold-input {
+  padding: 10px 14px;
+  font-size: 15px;
+  font-family: inherit;
+  border: 1px solid rgba(42, 31, 18, 0.25);
+  border-radius: 4px;
+  background: #fff;
+  color: inherit;
+  resize: vertical;
+  min-height: 80px;
+}

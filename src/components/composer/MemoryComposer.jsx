@@ -11,6 +11,8 @@ import PlacePicker from "./PlacePicker";
 import GpxImporter from "./GpxImporter";
 import PhotoDrop from "./PhotoDrop";
 import NarrationRecorder from "./NarrationRecorder";
+import ExportPanel from "./ExportPanel";
+import AiScaffoldInput from "./AiScaffoldInput";
 
 /**
  * Memory Composer — Slice A scaffold (v3.1).
@@ -48,6 +50,24 @@ export default function MemoryComposer({ onPreview, onCancel }) {
     const wps = interpolateLineWaypoints(state.origin, state.destination, 10);
     dispatch({ type: COMPOSER_ACTIONS.SET_WAYPOINTS, payload: wps });
   }, [state.origin, state.destination, gpxImported]);
+
+  const handleScaffold = useCallback(({ waypoints }) => {
+    if (!waypoints || waypoints.length < 2) return;
+    const wps = waypoints.map((w) => ({ lat: w.lat, lon: w.lon, elev: 0 }));
+    dispatch({ type: COMPOSER_ACTIONS.SET_WAYPOINTS, payload: wps });
+    setGpxImported(true); // suppress the A→B auto-interpolator
+    if (!state.origin) {
+      const first = waypoints[0];
+      dispatch({ type: COMPOSER_ACTIONS.SET_ORIGIN, payload: { name: first.name, lat: first.lat, lon: first.lon } });
+    }
+    if (!state.destination) {
+      const last = waypoints[waypoints.length - 1];
+      dispatch({ type: COMPOSER_ACTIONS.SET_DESTINATION, payload: { name: last.name, lat: last.lat, lon: last.lon } });
+    }
+    waypoints.slice(1, -1).forEach((w) => {
+      dispatch({ type: COMPOSER_ACTIONS.ADD_LANDMARK, payload: { name: w.name, lat: w.lat, lon: w.lon, blurb: w.name } });
+    });
+  }, [state.origin, state.destination]);
 
   const handleGpxImport = useCallback((pts, name) => {
     dispatch({ type: COMPOSER_ACTIONS.SET_WAYPOINTS, payload: pts });
@@ -130,6 +150,13 @@ export default function MemoryComposer({ onPreview, onCancel }) {
 
         <NarrationRecorder
           onRecorded={(u) => dispatch({ type: COMPOSER_ACTIONS.SET_NARRATION, payload: u })}
+        />
+
+        <AiScaffoldInput onScaffold={handleScaffold} />
+
+        <ExportPanel
+          config={ready ? toLocationConfig(state) : null}
+          narrationUrl={state.narrationUrl}
         />
 
         <div className="composer-summary" aria-live="polite">
