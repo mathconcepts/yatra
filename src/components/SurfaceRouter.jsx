@@ -3,7 +3,7 @@ import { useState, useEffect, lazy, Suspense } from "react";
 // Reels is lazy so the desktop bundle does not pull in reels code.
 // See ~/.gstack/projects/mathconcepts-yatra/root-main-v3-0-plan-20260512-144026.md
 // (reviewer correction #9: dynamic import gate).
-const Reels = lazy(() => import("./reels/ReelsPlaceholder.jsx"));
+const Reels = lazy(() => import("./reels/ReelFeed.jsx"));
 
 const STORAGE_KEY = "yatra.surface";
 
