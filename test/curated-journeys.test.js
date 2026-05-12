@@ -106,6 +106,6 @@ describe("hill-temple configs", () => {
   it("Yadagirigutta gains elevation from base to summit", () => {
     const wps = LOCATIONS["yadagirigutta"].routes[0].waypoints;
     expect(wps[0].elev).toBeLessThan(wps[wps.length - 1].elev);
-    expect(wps[wps.length - 1].elev - wps[0].elev).toBeGreaterThan(200);
+    expect(wps[wps.length - 1].elev - wps[0].elev).toBeGreaterThan(80);
   });
 });

@@ -5,12 +5,12 @@ const config = {
   subtitle: "The Telangana ascent to Lakshmi Narasimha",
 
   bounds: {
-    latMin: 17.580, latMax: 17.605,
-    lonMin: 78.925, lonMax: 78.955,
+    latMin: 17.590, latMax: 17.608,
+    lonMin: 78.940, lonMax: 78.958,
   },
 
-  origin:      { name: "Yadagirigutta town", lat: 17.5868, lon: 78.9380, elev: 485 },
-  destination: { name: "Yadadri temple", lat: 17.5945, lon: 78.9408, elev: 720 },
+  origin:      { name: "Yadagirigutta town", lat: 17.5970, lon: 78.9450, elev: 470 },
+  destination: { name: "Sri Lakshmi Narasimha Swamy Temple (Yadadri hilltop)", lat: 17.5995, lon: 78.9495, elev: 570 },
 
   mode: "mixed",
 
@@ -20,15 +20,15 @@ const config = {
       name: "Yadadri Ghat road",
       color: "#8a4528",
       difficulty: "Moderate",
-      stats: { distanceKm: 3.2, durationHr: 1.0 },
+      stats: { distanceKm: 3.0, durationHr: 1.0 },
       waypoints: [
-        { lat: 17.5868, lon: 78.9380, elev: 485 },  // Town base
-        { lat: 17.5885, lon: 78.9385, elev: 520 },  // First switchback
-        { lat: 17.5900, lon: 78.9388, elev: 565 },  // Second switchback
-        { lat: 17.5915, lon: 78.9392, elev: 610 },  // Pancha Narasimha cave gateway
-        { lat: 17.5930, lon: 78.9398, elev: 655 },  // Temple gateway / Rajagopuram
-        { lat: 17.5938, lon: 78.9403, elev: 690 },  // Outer prakaram
-        { lat: 17.5945, lon: 78.9408, elev: 720 },  // Sri Lakshmi Narasimha Swamy
+        { lat: 17.5970, lon: 78.9450, elev: 470 },  // Town base — Yadagirigutta bus stand
+        { lat: 17.5978, lon: 78.9458, elev: 490 },  // Foothill — climb begins
+        { lat: 17.5968, lon: 78.9468, elev: 510 },  // First switchback (south)
+        { lat: 17.5985, lon: 78.9472, elev: 530 },  // Pancha Narasimha cave gateway
+        { lat: 17.5982, lon: 78.9485, elev: 550 },  // Rajagopuram approach
+        { lat: 17.5990, lon: 78.9490, elev: 562 },  // Outer prakaram
+        { lat: 17.5995, lon: 78.9495, elev: 570 },  // Sri Lakshmi Narasimha Swamy — hilltop sanctum
       ],
     },
   ],
@@ -37,7 +37,7 @@ const config = {
     {
       id: "town-base",
       name: "Yadagirigutta town",
-      lat: 17.5868, lon: 78.9380, elev: 485,
+      lat: 17.5970, lon: 78.9450, elev: 470,
       type: "gateway",
       blurb: "The plains village from which the hill rises sharply. Pilgrims wash, eat at the langar, and begin the climb here. The new Yadadri development has paved roads to the top, but many still walk.",
       ritual: "Prasadam · sacred bath",
@@ -45,7 +45,7 @@ const config = {
     {
       id: "pancha-narasimha",
       name: "Pancha Narasimha cave",
-      lat: 17.5915, lon: 78.9392, elev: 610,
+      lat: 17.5985, lon: 78.9472, elev: 530,
       type: "milestone",
       blurb: "A natural cave shrine on the western face of the hill where five forms of Narasimha are believed to manifest. The original cave temple — restored as part of the Yadadri reconstruction completed in 2022.",
       ritual: "Pradakshina · cave darshan",
@@ -53,21 +53,21 @@ const config = {
     {
       id: "rajagopuram",
       name: "Rajagopuram",
-      lat: 17.5930, lon: 78.9398, elev: 655,
+      lat: 17.5982, lon: 78.9485, elev: 550,
       type: "milestone",
       blurb: "The grand entrance tower of the rebuilt Yadadri temple complex. Carved from black granite quarried locally and clad in 125 kg of gold leaf, it is one of the tallest temple gopurams in southern India.",
     },
     {
       id: "outer-prakaram",
       name: "Outer prakaram",
-      lat: 17.5938, lon: 78.9403, elev: 690,
+      lat: 17.5990, lon: 78.9490, elev: 562,
       type: "milestone",
       blurb: "The first circumambulatory passage around the sanctum, paved with the same black Krishna-shila granite that lines the entire reconstructed complex.",
     },
     {
       id: "lakshmi-narasimha",
       name: "Sri Lakshmi Narasimha Swamy",
-      lat: 17.5945, lon: 78.9408, elev: 720,
+      lat: 17.5995, lon: 78.9495, elev: 570,
       type: "destination",
       blurb: "The presiding deity of Yadadri: Vishnu in his fierce man-lion avatar, here consort to Lakshmi in a benevolent posture. The sanctum was rebuilt and reconsecrated in March 2022 after a multi-decade reconstruction overseen by the Telangana state government.",
       ritual: "Abhishekam · darshan",
