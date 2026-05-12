@@ -41,4 +41,13 @@ describe("pickSurface", () => {
     expect(pickSurface(0, 0, null, null)).toBe("atlas");
     expect(pickSurface(undefined, undefined, null, null)).toBe("atlas");
   });
+
+  it("composer override beats viewport (v3.1)", () => {
+    expect(pickSurface(1280, 800, "composer", null)).toBe("composer");
+    expect(pickSurface(375, 812, "composer", null)).toBe("composer");
+  });
+
+  it("composer stored preference beats viewport (v3.1)", () => {
+    expect(pickSurface(1280, 800, null, "composer")).toBe("composer");
+  });
 });

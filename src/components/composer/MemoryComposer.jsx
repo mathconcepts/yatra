@@ -1,0 +1,111 @@
+import { useReducer, useCallback } from "react";
+import {
+  composerReducer,
+  initialComposerState,
+  COMPOSER_ACTIONS,
+  isReadyToPreview,
+  toLocationConfig,
+} from "./composer-state";
+
+/**
+ * Memory Composer — Slice A scaffold (v3.1).
+ *
+ * Form-driven builder for "make your own memory reel". Slice A wires the
+ * surface, the state reducer, title + mode inputs, and a Preview button
+ * gated on isReadyToPreview. Future slices fill in:
+ *   B — A→B picker (Nominatim geocoder)
+ *   C — GPX import
+ *   D — Photo drop (EXIF GPS → landmarks)
+ *   E — Narration (MediaRecorder)
+ *   F — WebCodecs MP4 export
+ *   G — AI free-text scaffold (Nominatim-verified)
+ *
+ * The composer never renders a map itself — when ready, it projects state
+ * to a LocationConfig-shaped object and ReelPlayer takes over.
+ */
+export default function MemoryComposer({ onPreview, onCancel }) {
+  const [state, dispatch] = useReducer(composerReducer, initialComposerState);
+
+  const setTitle = useCallback((v) => dispatch({ type: COMPOSER_ACTIONS.SET_TITLE, payload: v }), []);
+  const setMode = useCallback((v) => dispatch({ type: COMPOSER_ACTIONS.SET_MODE, payload: v }), []);
+
+  const handlePreview = () => {
+    const cfg = toLocationConfig(state);
+    if (cfg && typeof onPreview === "function") onPreview(cfg);
+  };
+
+  const ready = isReadyToPreview(state);
+
+  return (
+    <div className="composer">
+      <header className="composer-header">
+        <h1 className="composer-title">Compose a memory</h1>
+        <button type="button" className="composer-cancel" onClick={onCancel} aria-label="Cancel and return">×</button>
+      </header>
+
+      <form className="composer-form" onSubmit={(e) => e.preventDefault()}>
+        <label className="composer-field">
+          <span className="composer-label">Title</span>
+          <input
+            type="text"
+            value={state.title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="A week in Manali"
+            maxLength={80}
+          />
+        </label>
+
+        <fieldset className="composer-field composer-mode">
+          <legend className="composer-label">Mode</legend>
+          {["road", "rail", "trail", "mixed"].map((m) => (
+            <label key={m} className="composer-radio">
+              <input
+                type="radio"
+                name="mode"
+                value={m}
+                checked={state.mode === m}
+                onChange={() => setMode(m)}
+              />
+              <span>{m}</span>
+            </label>
+          ))}
+        </fieldset>
+
+        <div className="composer-placeholder" data-testid="composer-route-picker">
+          <p className="composer-hint">
+            Origin / destination picker — Slice B
+          </p>
+        </div>
+
+        <div className="composer-placeholder" data-testid="composer-gpx-import">
+          <p className="composer-hint">GPX import — Slice C</p>
+        </div>
+
+        <div className="composer-placeholder" data-testid="composer-photo-drop">
+          <p className="composer-hint">Photo drop — Slice D</p>
+        </div>
+
+        <div className="composer-placeholder" data-testid="composer-narration">
+          <p className="composer-hint">Narration — Slice E</p>
+        </div>
+
+        <div className="composer-summary" aria-live="polite">
+          {ready
+            ? <span className="composer-ready">Ready to preview.</span>
+            : <span className="composer-not-ready">Add title, origin, and destination to enable preview.</span>}
+        </div>
+
+        <div className="composer-actions">
+          <button
+            type="button"
+            className="composer-preview"
+            onClick={handlePreview}
+            disabled={!ready}
+          >
+            Preview reel
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}

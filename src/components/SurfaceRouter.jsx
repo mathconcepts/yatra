@@ -4,8 +4,10 @@ import { useState, useEffect, lazy, Suspense } from "react";
 // See ~/.gstack/projects/mathconcepts-yatra/root-main-v3-0-plan-20260512-144026.md
 // (reviewer correction #9: dynamic import gate).
 const Reels = lazy(() => import("./reels/ReelFeed.jsx"));
+const Composer = lazy(() => import("./composer/MemoryComposer.jsx"));
 
 const STORAGE_KEY = "yatra.surface";
+const VALID_SURFACES = ["atlas", "reels", "composer"];
 
 /**
  * Pure decision: pick the right surface for a viewport.
@@ -17,8 +19,8 @@ const STORAGE_KEY = "yatra.surface";
  * the reviewer flagged.
  */
 export function pickSurface(width, height, urlOverride, stored) {
-  if (urlOverride === "reels" || urlOverride === "atlas") return urlOverride;
-  if (stored === "reels" || stored === "atlas") return stored;
+  if (VALID_SURFACES.includes(urlOverride)) return urlOverride;
+  if (VALID_SURFACES.includes(stored)) return stored;
   if (!width || !height) return "atlas"; // SSR / unknown → safe default
   const portrait = height / width > 1;
   const small = Math.min(width, height) < 768;
@@ -28,14 +30,14 @@ export function pickSurface(width, height, urlOverride, stored) {
 function readURLOverride() {
   if (typeof window === "undefined") return null;
   const v = new URLSearchParams(window.location.search).get("surface");
-  return v === "reels" || v === "atlas" ? v : null;
+  return VALID_SURFACES.includes(v) ? v : null;
 }
 
 function readStoredOverride() {
   if (typeof window === "undefined") return null;
   try {
     const v = window.localStorage.getItem(STORAGE_KEY);
-    return v === "reels" || v === "atlas" ? v : null;
+    return VALID_SURFACES.includes(v) ? v : null;
   } catch {
     return null;
   }
@@ -89,6 +91,14 @@ export default function SurfaceRouter({ atlas, locationId, locations }) {
     setOverride(next);
   };
 
+  if (surface === "composer") {
+    return (
+      <Suspense fallback={<div className="jm-loading" role="status">Loading…</div>}>
+        <Composer onCancel={() => switchSurface("atlas")} onPreview={() => switchSurface("reels")} />
+      </Suspense>
+    );
+  }
+
   if (surface === "reels") {
     return (
       <Suspense fallback={<div className="jm-loading" role="status">Loading…</div>}>
@@ -104,14 +114,24 @@ export default function SurfaceRouter({ atlas, locationId, locations }) {
   return (
     <>
       {atlas}
-      <button
-        type="button"
-        className="jm-surface-toggle"
-        onClick={() => switchSurface("reels")}
-        aria-label="Switch to Reels mode"
-      >
-        Reels mode
-      </button>
+      <div className="jm-surface-toggles">
+        <button
+          type="button"
+          className="jm-surface-toggle"
+          onClick={() => switchSurface("composer")}
+          aria-label="Compose a memory"
+        >
+          Compose memory
+        </button>
+        <button
+          type="button"
+          className="jm-surface-toggle"
+          onClick={() => switchSurface("reels")}
+          aria-label="Switch to Reels mode"
+        >
+          Reels mode
+        </button>
+      </div>
     </>
   );
 }
