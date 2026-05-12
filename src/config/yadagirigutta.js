@@ -10,7 +10,7 @@ const config = {
   },
 
   origin:      { name: "Yadagirigutta town", lat: 17.5970, lon: 78.9450, elev: 470 },
-  destination: { name: "Sri Lakshmi Narasimha Swamy Temple (Yadadri hilltop)", lat: 17.5995, lon: 78.9495, elev: 570 },
+  destination: { name: "Yadadri temple", lat: 17.5995, lon: 78.9495, elev: 570 },
 
   mode: "mixed",
 
