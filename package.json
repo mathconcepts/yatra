@@ -1,7 +1,7 @@
 {
   "name": "yatra",
   "private": true,
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "Extensible location-journey visualizer. Map any pilgrimage, trek, or route with real terrain tiles, real-time weather, and milestone storytelling.",
   "type": "module",
   "scripts": {
@@ -9,7 +9,10 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "polish:dry": "node scripts/polish-postcards.mjs --dry-run",
+    "polish": "node scripts/polish-postcards.mjs",
+    "polish:check": "node scripts/check-postcard-manifest.mjs"
   },
   "dependencies": {
     "maplibre-gl": "^4.7.1",

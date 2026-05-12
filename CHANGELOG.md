@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.9] - 2026-05-12
+
+### Added
+- **Postcard polish pipeline** (`scripts/polish-postcards.mjs`) — build-time Node ESM driver that runs Claude over hand-written landmark `blurb`s to tighten prose to ≤60 words while preserving every place name and numeric fact. Religious carve-out: skips `shrine` and `destination`-with-`ritual` landmarks. Idempotent via per-landmark draft + prompt hashes — re-running with no changes is free.
+- **Strict polish prompt** (`scripts/lib/postcard-prompt.mjs`) — model pin `claude-sonnet-4-7`, temp 0, system prompt versioned via `PROMPT_VERSION` so version bumps invalidate every entry.
+- **Eval gate** (`scripts/lib/proper-noun-diff.mjs`) — pure function that extracts capitalised tokens, ignores sentence-initial caps + a stop list of function words and pronouns. Polish is REJECTED if it introduces any proper noun not in the draft.
+- **`scripts/lib/should-polish.mjs`** — religious carve-out predicate (P3-revised from the v3.0 autoplan): shrines and ritual destinations stay hand-curated.
+- **Manifest** (`polish-manifest.json`) — stores `{draftHash, polishedHash, polished, model, temp, promptVersion, promptHash, timestamp}` per landmark.
+- **CI manifest verifier** (`scripts/check-postcard-manifest.mjs`) — runs on every push: asserts polishedHash matches the polished text, draft still hashes to the manifest's `draftHash` (catches "draft edited but polish not re-run"), no new proper nouns vs current draft, ≤60 words.
+- **`docs/POSTCARD-POLISH.md`** — full pipeline docs: how to run, what CI checks, religious carve-out rationale, cost estimate, prompt versioning.
+- **npm scripts**: `polish:dry`, `polish`, `polish:check`.
+- Tests: 26 new — `extractProperNouns` semantics (sentence-initial / function-word / pronoun filtering), `diffNewProperNouns`, `wordCount`, `shouldPolish` religious carve-out matrix (10 cases), `postcard-prompt` invariants.
+
+### Changed
+- `.github/workflows/test.yml` now runs `npm test` + `polish:check` on every push and PR. Empty manifest passes trivially — this is the v3.0 starting state.
+
+### Notes
+- The pipeline ships with `polish-manifest.json` empty. Each curated journey still ships fully hand-written. Run `npm run polish` locally with `ANTHROPIC_API_KEY` set when you want LLM-tightened prose; review the diff in the manifest; commit.
+- Cost estimate: ~$0.05 for a full v3.0 corpus (19 polish-eligible landmarks).
+
 ## [1.0.8] - 2026-05-12
 
 ### Added
