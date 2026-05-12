@@ -19,6 +19,7 @@ export default function MapView({
   currentPos,
   isJourneyActive,
   onLandmarkClick,
+  onMapReady,
 }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
@@ -77,6 +78,9 @@ export default function MapView({
 
       addOverlays();
       isStyleLoadedRef.current = true;
+      // External camera drivers (e.g. ReelPlayer's mood-cadence loop) get
+      // the map handle here. Called once per init.
+      if (typeof onMapReady === "function") onMapReady(map);
     });
 
     return () => {
