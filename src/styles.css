@@ -387,3 +387,179 @@ body {
   cursor: pointer;
 }
 .reels-placeholder-cta:hover { background: #3d2818; }
+
+/* ─────────────────────────────────────────────────────────────────
+   v3.0 Slice 2 — Reel player + feed
+   ──────────────────────────────────────────────────────────────── */
+
+.reel-feed {
+  position: fixed; inset: 0;
+  background: #1c1814;
+  display: grid;
+  place-items: center;
+  font-family: "Manrope", system-ui, sans-serif;
+  color: #f4ede1;
+  overflow: hidden;
+  touch-action: pan-y;
+}
+.reel-feed-empty { color: rgba(244, 237, 225, 0.7); text-align: center; padding: 24px; }
+
+.reel {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  max-width: min(100vw, calc(100vh * 9 / 16));
+  margin: 0 auto;
+  background: #0d0a07;
+  overflow: hidden;
+}
+
+.reel-map { position: absolute; inset: 0; }
+.reel-map .maplibregl-ctrl-bottom-right,
+.reel-map .maplibregl-ctrl-top-right { display: none; }
+.reel-map .maplibregl-ctrl-bottom-left { bottom: 110px; opacity: 0.6; }
+
+.reel-overlay-top {
+  position: absolute; top: 44px; left: 22px; right: 22px;
+  pointer-events: none;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.55);
+}
+.reel-eyebrow {
+  display: inline-block;
+  font-family: "Cormorant Garamond", serif;
+  font-style: italic;
+  font-size: 13px;
+  color: #ffb84a;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+.reel-title {
+  font-family: "Cormorant Garamond", serif;
+  font-weight: 500;
+  font-size: 28px;
+  line-height: 1.05;
+  margin: 0;
+}
+
+.reel-postcard {
+  position: absolute;
+  left: 18px; right: 18px;
+  bottom: 110px;
+  background: rgba(255, 250, 240, 0.96);
+  border: 1px solid rgba(201, 187, 163, 0.7);
+  border-radius: 14px;
+  padding: 14px 16px 12px;
+  color: #1c1814;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.32);
+  animation: reel-postcard-in 0.4s ease-out both;
+}
+@keyframes reel-postcard-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.reel-postcard-name {
+  font-family: "Cormorant Garamond", serif;
+  font-weight: 600;
+  font-size: 20px;
+  line-height: 1.1;
+  margin-bottom: 6px;
+}
+.reel-postcard-body {
+  font-family: "Cormorant Garamond", serif;
+  font-style: italic;
+  font-size: 15px;
+  line-height: 1.45;
+  margin: 0;
+  color: rgba(28, 24, 20, 0.85);
+}
+.reel-postcard-ritual {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(28, 24, 20, 0.12);
+  font-size: 10px;
+  font-weight: 700;
+  color: #8a4528;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.reel-controls {
+  position: absolute;
+  left: 22px; right: 22px;
+  bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.reel-play {
+  width: 44px; height: 44px;
+  border-radius: 22px;
+  border: 0;
+  background: #8a4528;
+  color: #f4ede1;
+  font-size: 14px;
+  display: grid; place-items: center;
+  cursor: pointer;
+}
+.reel-play:hover { background: #6f3620; }
+.reel-progress {
+  flex: 1;
+  height: 4px;
+  background: rgba(244, 237, 225, 0.22);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.reel-progress-fill {
+  height: 100%;
+  background: #ffb84a;
+  transition: width 0.08s linear;
+}
+
+.reel-feed-nav {
+  position: absolute;
+  top: 44px; right: 18px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #f4ede1;
+  background: rgba(28, 24, 20, 0.55);
+  padding: 4px 8px;
+  border-radius: 999px;
+  text-shadow: none;
+}
+
+.reel-feed-arrows {
+  position: absolute;
+  top: 50%; right: 14px;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.reel-feed-arrow {
+  width: 36px; height: 36px;
+  border-radius: 18px;
+  border: 0;
+  background: rgba(28, 24, 20, 0.55);
+  color: #f4ede1;
+  font-size: 14px;
+  cursor: pointer;
+}
+.reel-feed-arrow:disabled { opacity: 0.3; cursor: default; }
+
+.reel-back {
+  position: absolute;
+  top: 44px; left: 18px;
+  padding: 5px 12px;
+  font-family: "Manrope", system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #f4ede1;
+  background: rgba(28, 24, 20, 0.55);
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.reel-back:hover { background: rgba(28, 24, 20, 0.85); }

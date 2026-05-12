@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.4] - 2026-05-12
+
+### Added
+- `ReelPlayer` component — single vertical 9:16 reel with MapLibre 3D terrain, auto-playing marker traversal of the active route, Cormorant Garamond title overlay, and a postcard caption that follows the nearest landmark.
+- `ReelFeed` component — swipe-paginated container for the Reels surface. Touch swipe (≥60 px), keyboard `ArrowUp`/`ArrowDown`/`PageUp`/`PageDown`, on-screen up/down arrows, position indicator, and an "Atlas" back button. `Escape` returns to the Atlas surface.
+- `clampIndex()` pure helper exported from `ReelFeed` for direct unit testing.
+- Tests: 10 new — `clampIndex` coverage, `ReelFeed` keyboard navigation, edge bounds, Atlas-back wiring, empty-state rendering.
+
+### Changed
+- `SurfaceRouter` now lazy-loads `ReelFeed` instead of the Slice 1 placeholder. The Reels chunk is verified separate from the desktop bundle (`ReelFeed-*.js`, 3.65 kB / 1.46 kB gzipped).
+- The Reels surface is no longer a stub: on portrait viewports the user lands directly in a vertical reel of the current journey, with the marker animating along the route every 20 seconds.
+
+### Removed
+- `ReelsPlaceholder.jsx` — replaced by `ReelFeed`. The Slice 1 stub is no longer needed.
+
 ## [1.0.3] - 2026-05-12
 
 ### Added
