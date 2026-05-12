@@ -177,6 +177,7 @@ export default function ReelPlayer({ config }) {
           isJourneyActive={playing}
           onLandmarkClick={() => {}}
           onMapReady={handleMapReady}
+          enableTileChain
         />
       </div>
 

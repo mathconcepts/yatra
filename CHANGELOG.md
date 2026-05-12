@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.7] - 2026-05-12
+
+### Added
+- `src/services/tileSourceChain.js` — pure state machine that decides when to swap the active basemap raster source after sustained tile failures. Configurable threshold (default 3) + sliding window (default 4 s). `recordFailure`, `tryFlush`, `reset`, `activeSource` exported.
+- `src/services/basemapStyles.js` — `tilesForSource(name)` factory returning tile URL patterns for `esri`, `osm`, `bhuvan-proxy`. Bhuvan only activates when `VITE_BHUVAN_PROXY_URL` is set at build time.
+- `workers/bhuvan-proxy/` — Cloudflare Worker scaffold:
+  - `src/index.ts` — proxies Bhuvan WMS, mints HMAC-signed 60 s tokens, validates upstream `content-type` is `image/*` to catch HTML-200 errors, caches failures 60 s, full CORS.
+  - `wrangler.toml`, `package.json`, `README.md` — deploy instructions + smoke test.
+- `MapView` learns an opt-in `enableTileChain` prop. When true, installs the chain on map init, subscribes to `error` events scoped to `basemap`, atomic-swaps via `source.setTiles([...])` at `moveend` to avoid mid-pan flicker.
+- `ReelPlayer` passes `enableTileChain` so vertical reels benefit from the fallback. Atlas does not pass it — its behaviour is unchanged.
+- Tests: 17 new — chain state machine (10) + basemap-styles source factory (7).
+
+### Notes
+- Reviewer corrections #3 and #4 from the v3.0 plan landed in this slice:
+  - **#3** — debounced source swap at `moveend` (not mid-gesture), threshold-based via the sliding-window chain
+  - **#4** — Worker uses `transformRequest`-friendly HMAC token, not Turnstile-per-tile (which breaks MapLibre's `<source tiles:[...]>` flow). HTML-200 errors are detected by `content-type` validation and cached 60 s to avoid hammering Bhuvan during outages.
+- The Worker is not deployed from this PR. Deploy via `wrangler deploy` from `workers/bhuvan-proxy/`, set `VITE_BHUVAN_PROXY_URL` at build time, and the chain picks up the third fallback automatically.
+
 ## [1.0.6] - 2026-05-12
 
 ### Added
