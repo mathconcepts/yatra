@@ -6,7 +6,9 @@
 
 > *Yatra* (यात्रा) — Sanskrit for pilgrimage, journey, or sacred passage.
 
-An extensible location-journey visualizer with real terrain tiles, real-time weather, and milestone storytelling. Built as a sample for **Tirupati → Tirumala**, but the entire UI is driven by a single `LocationConfig` object — drop a new config file into `src/config/` and it works for any pilgrimage, trek, road trip, or route.
+An extensible location-journey visualizer with real terrain tiles, real-time weather, and milestone storytelling. **v1.1.0 ships with four curated Indian journeys** (Tirupati → Tirumala, Srirangam → Trichy, Yadagiri Hill, Konkan Railway) plus a **vertical 9:16 Reels surface** for portrait viewports — same map, same data, mood-cadence camera that pitches and arcs along the route. Pick A→B from the landscape Atlas or swipe through the Reels feed on your phone.
+
+The entire UI is driven by a single `LocationConfig` object — drop a new config file into `src/config/` and it works for any pilgrimage, trek, road trip, or route.
 
 ## Features
 
