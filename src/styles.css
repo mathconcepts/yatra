@@ -649,3 +649,61 @@ body {
   cursor: pointer;
   touch-action: none;
 }
+
+/* ─────────────────────────────────────────────────────────────────
+   v3.0 Slice 7 — vertical polish: reduced-motion + scrim
+   ──────────────────────────────────────────────────────────────── */
+
+/* Stronger scrim behind text-on-map for readability against satellite
+   imagery (Konkan / Yadagiri use the imagery basemap). */
+.reel-overlay-top::before {
+  content: "";
+  position: absolute;
+  inset: -16px -24px -24px -24px;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.55) 0%,
+    rgba(0, 0, 0, 0.25) 60%,
+    rgba(0, 0, 0, 0) 100%
+  );
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 0 0 14px 14px;
+}
+.reel-overlay-top {
+  position: absolute;
+  isolation: isolate; /* contain the negative z-index scrim */
+}
+
+/* When the user prefers reduced motion, drop the entrance + flash
+   animations and slow the countdown bar so the visual "rush" softens.
+   The functional state (auto / manual) stays identical — only the
+   motion changes. Reviewer correction adjacent to design-review #6. */
+@media (prefers-reduced-motion: reduce) {
+  .reel-postcard {
+    animation: none;
+  }
+  .auto-pill-auto {
+    animation: none;
+  }
+  .auto-pill-countdown {
+    /* keep the bar visible but skip the linear-decay animation */
+    animation: none;
+    transform: scaleX(0.5);
+    opacity: 0.7;
+  }
+  .reel-progress-fill {
+    transition: none;
+  }
+}
+
+/* Cormorant italic invocation if a config defines one — surfaces in the
+   reel's eyebrow area as a faint mantra. Slice 8 wires this in. */
+.reel-invocation {
+  font-family: "Cormorant Garamond", serif;
+  font-style: italic;
+  font-size: 13px;
+  color: rgba(244, 237, 225, 0.7);
+  letter-spacing: 0.04em;
+  margin-top: 4px;
+}

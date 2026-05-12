@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.10] - 2026-05-12
+
+### Added
+- `src/services/polishedPostcards.js` — runtime lookup that prefers polished text from `polish-manifest.json` when present, otherwise falls back to the hand-written `landmark.blurb`. Vite inlines the manifest at build time, so this is a free lookup at runtime with zero behaviour change when the manifest is empty (v3.0 starting state).
+- Reels postcards now read `polishedBlurb(config.id, landmark.id) || landmark.blurb`. Once the corpus is polished by the Slice 6c pipeline, every reel surfaces the tightened prose automatically — no per-config wiring needed.
+- `@media (prefers-reduced-motion: reduce)` stanza in `styles.css`: drops the postcard entrance animation, the auto-camera-pill flash, and the countdown decay. Functional state stays identical; only the motion softens. Honors WCAG 2.1 SC 2.3.3.
+- Stronger gradient scrim behind the reel title overlay so text reads cleanly over the imagery basemap (Konkan / Yadagiri).
+- Tests: 3 new — polished-text returns from manifest, returns null for missing pair, returns null for nullish args.
+
 ## [1.0.9] - 2026-05-12
 
 ### Added
