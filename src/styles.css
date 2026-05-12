@@ -563,3 +563,89 @@ body {
   cursor: pointer;
 }
 .reel-back:hover { background: rgba(28, 24, 20, 0.85); }
+
+/* ─────────────────────────────────────────────────────────────────
+   v3.0 Slice 4 — AutoCameraPill
+   ──────────────────────────────────────────────────────────────── */
+
+.auto-pill {
+  position: absolute;
+  top: 44px; right: 18px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 8px 14px 8px 12px;
+  border: 0;
+  border-radius: 999px;
+  font-family: "Manrope", system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  overflow: hidden;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+}
+.auto-pill:focus-visible {
+  outline: 2px solid #ffb84a;
+  outline-offset: 2px;
+}
+
+.auto-pill-auto {
+  background: #8a4528;
+  color: #f4ede1;
+}
+.auto-pill-auto .auto-pill-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #f4ede1;
+  box-shadow: 0 0 0 3px rgba(244, 237, 225, 0.18);
+}
+
+.auto-pill-manual {
+  background: rgba(28, 24, 20, 0.55);
+  color: #f4ede1;
+  border: 1px solid rgba(244, 237, 225, 0.55);
+}
+.auto-pill-manual .auto-pill-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1.5px solid #f4ede1;
+}
+
+.auto-pill-countdown {
+  position: absolute;
+  left: 0; bottom: 0;
+  height: 2px;
+  width: 100%;
+  background: #ffb84a;
+  transform-origin: left center;
+  animation: auto-pill-countdown 5000ms linear forwards;
+}
+@keyframes auto-pill-countdown {
+  from { transform: scaleX(1); }
+  to   { transform: scaleX(0); }
+}
+
+/* Force-resume flash: when mode flips back to auto, the brief
+   re-render briefly applies this animation. The animation is
+   tied to the .auto-pill-auto class so it plays each time the
+   class is applied (i.e. on transition). */
+.auto-pill-auto {
+  animation: auto-pill-flash 0.45s ease-out;
+}
+@keyframes auto-pill-flash {
+  0%   { box-shadow: 0 0 0 0 rgba(255, 184, 74, 0.7); }
+  50%  { box-shadow: 0 0 0 12px rgba(255, 184, 74, 0); }
+  100% { box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18); }
+}
+
+/* Allow click-through on the map under the postcard so users can
+   still scrub the camera by dragging on the postcard's open area.
+   The pill itself is interactive. */
+.reel-progress {
+  cursor: pointer;
+  touch-action: none;
+}

@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.6] - 2026-05-12
+
+### Added
+- `AutoCameraPill` component — visible top-right pill that surfaces the mood-cadence override state. Two visible states (auto / manual) plus a 5-second countdown bar that drains via pure CSS in manual mode. Tap any time to flip state immediately. Touch target ≥ 44 pt, aria-label + aria-pressed wired.
+- **Manual override state machine** in `ReelPlayer`:
+  - User drag / pitch / rotate / wheel on the map → enters manual; rAF loop suppresses `map.jumpTo` so the user's camera position is preserved.
+  - 5 s of no input → returns to auto with a 30 ms haptic tap (where supported).
+  - Tap the pill: flip immediately (force-resume from manual, or take manual control from auto).
+- **Progress-bar scrub** — clicking or touching the progress bar jumps progress to that point and enters manual mode (so the camera doesn't snap away from the user's scrub). The progress bar is now an ARIA `slider`.
+- Tests: 7 new — pill label / aria-pressed / aria-label per mode, click fires callback, scoped class names, countdown bar present only in manual mode.
+
+### Changed
+- `ReelPlayer` rAF loop now gates `map.jumpTo` on `interactionModeRef.current === "auto"`. Manual mode leaves the user's pan/pitch alone; auto resumes from current state without snap-back.
+- MapLibre user-input events (`dragstart`, `pitchstart`, `rotatestart`, `wheel`) are attached in `onMapReady` and drive the manual-mode transition. Programmatic `jumpTo` calls do not trigger these events, so the auto path stays clean.
+
 ## [1.0.5] - 2026-05-12
 
 ### Added

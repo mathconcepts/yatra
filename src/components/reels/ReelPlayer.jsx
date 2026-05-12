@@ -1,43 +1,77 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import MapView from "../MapView";
 import { interpolateRoute } from "../../utils/route";
 import { planCamera, sampleCameraPlan } from "../../services/moodCamera";
+import AutoCameraPill from "./AutoCameraPill";
 
 const LOOP_SECONDS = 22;          // one full traversal
 const REACT_UPDATE_MS = 200;      // React re-render cadence for marker + UI
+const AUTO_RESUME_MS = 5000;      // 5 s no-touch → auto resumes
+const HAPTIC_MS = 30;             // tap-tick haptic on resume
 
 /**
  * Single vertical 9:16 reel.
  *
- * Slice 3 split: the **camera** is driven by a ref-held rAF loop that
- * calls MapLibre directly (no React on the hot path). The **marker
- * position** + progress bar update at ~5 fps via throttled React state,
- * which is plenty for a single DOM-marker move and a thin progress fill.
+ * Camera is driven by a ref-held rAF loop that calls MapLibre directly
+ * (Slice 3, reviewer correction #5). Slice 4 adds the manual-override
+ * state machine wired to MapLibre's user-input events:
  *
- * This is reviewer correction #5 from the v3.0 plan: keep React out of
- * the per-frame camera path so Pixel 6a stays above 24 fps even with
- * terrain + overlays composited at portrait aspect.
+ *   auto  ── user drags / pitches / rotates / wheels the map ──▶ manual
+ *   manual ── 5 s of no input ──▶ auto (with 30 ms haptic on resume)
+ *   either ── user taps the AutoCameraPill ──▶ flips immediately
+ *
+ * While in manual mode the rAF loop still runs (progress ref still
+ * advances, marker still updates) but `map.jumpTo` is suppressed — the
+ * user keeps whatever camera state they panned/pitched to. When auto
+ * resumes, the loop picks up from the current state with no snap-back.
  */
 export default function ReelPlayer({ config }) {
   const route = config.routes?.[0];
   const plan = useMemo(() => planCamera(config), [config]);
 
-  // refs — NOT React state. The rAF loop reads/writes these directly.
+  // Refs — NOT React state. The rAF loop reads/writes these directly.
   const mapRef = useRef(null);
   const progressRef = useRef(0);
   const playingRef = useRef(true);
   const startedAtRef = useRef(null);
   const rafIdRef = useRef(null);
+  const interactionModeRef = useRef("auto");
+  const manualTimerRef = useRef(null);
 
-  // The only React state on the hot path: a tick counter bumped at
-  // REACT_UPDATE_MS cadence so marker / progress UI re-render.
+  // React state on the cool path: tick (throttled UI), play (button label),
+  // interactionMode (pill label), manualKey (restarts the pill's CSS countdown).
   const [, setTick] = useState(0);
   const lastTickRef = useRef(0);
-
-  // Play / pause is React state because the play button needs to reflect
-  // it visually. The rAF loop reads the ref mirror to avoid stale closures.
   const [playing, setPlaying] = useState(true);
+  const [interactionMode, setInteractionMode] = useState("auto");
+  const [manualKey, setManualKey] = useState(0);
+
   useEffect(() => { playingRef.current = playing; }, [playing]);
+  useEffect(() => { interactionModeRef.current = interactionMode; }, [interactionMode]);
+
+  const enterManual = useCallback(() => {
+    clearTimeout(manualTimerRef.current);
+    setManualKey((k) => k + 1);
+    setInteractionMode("manual");
+    manualTimerRef.current = setTimeout(() => {
+      setInteractionMode("auto");
+      try {
+        if (typeof navigator !== "undefined" && navigator.vibrate) {
+          navigator.vibrate(HAPTIC_MS);
+        }
+      } catch { /* unsupported — fine */ }
+    }, AUTO_RESUME_MS);
+  }, []);
+
+  const togglePill = useCallback(() => {
+    if (interactionModeRef.current === "manual") {
+      clearTimeout(manualTimerRef.current);
+      setInteractionMode("auto");
+    } else {
+      // Pinning to manual until next interaction or pill-tap.
+      enterManual();
+    }
+  }, [enterManual]);
 
   // Camera + marker rAF loop. Mounts once; reads refs.
   useEffect(() => {
@@ -59,22 +93,24 @@ export default function ReelPlayer({ config }) {
       const t = (elapsed / LOOP_SECONDS) % 1;
       progressRef.current = t;
 
-      // Drive the camera DIRECTLY via MapLibre — no React render involved.
-      const map = mapRef.current;
-      if (map && plan.length > 0) {
-        const pos = interpolateRoute(wps, t);
-        const cam = sampleCameraPlan(plan, t);
-        if (cam && pos) {
-          map.jumpTo({
-            center: [pos.lon, pos.lat],
-            zoom: cam.zoom,
-            pitch: cam.pitch,
-            bearing: cam.bearing,
-          });
+      // Drive the camera ONLY in auto mode — leaves the user's pan/pitch
+      // alone in manual.
+      if (interactionModeRef.current === "auto") {
+        const map = mapRef.current;
+        if (map && plan.length > 0) {
+          const pos = interpolateRoute(wps, t);
+          const cam = sampleCameraPlan(plan, t);
+          if (cam && pos) {
+            map.jumpTo({
+              center: [pos.lon, pos.lat],
+              zoom: cam.zoom,
+              pitch: cam.pitch,
+              bearing: cam.bearing,
+            });
+          }
         }
       }
 
-      // Throttled React tick — moves marker + progress bar.
       if (now - lastTickRef.current > REACT_UPDATE_MS) {
         lastTickRef.current = now;
         setTick((n) => n + 1);
@@ -91,10 +127,33 @@ export default function ReelPlayer({ config }) {
     };
   }, [plan, route]);
 
+  // Clean up the manual-mode timer on unmount.
+  useEffect(() => () => clearTimeout(manualTimerRef.current), []);
+
+  const handleMapReady = useCallback((map) => {
+    mapRef.current = map;
+    // dragstart / pitchstart / rotatestart only fire on user gestures,
+    // not on programmatic map.jumpTo. Wheel zoom also opts in.
+    const onUserInput = () => enterManual();
+    map.on("dragstart", onUserInput);
+    map.on("pitchstart", onUserInput);
+    map.on("rotatestart", onUserInput);
+    map.on("wheel", onUserInput);
+  }, [enterManual]);
+
+  const handleProgressScrub = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clientX = e.clientX ?? e.touches?.[0]?.clientX;
+    if (clientX == null) return;
+    const x = Math.max(0, Math.min(rect.width, clientX - rect.left));
+    progressRef.current = x / rect.width;
+    startedAtRef.current = null; // loop re-syncs on next frame
+    enterManual();
+    setTick((n) => n + 1);
+  };
+
   const currentPos = route ? interpolateRoute(route.waypoints, progressRef.current) : null;
 
-  // Nearest landmark, recomputed only at the React tick cadence (so on the
-  // hot rAF path this never runs).
   const activeLandmark = useMemo(() => {
     if (!currentPos || !config.landmarks?.length) return null;
     let best = config.landmarks[0];
@@ -107,8 +166,6 @@ export default function ReelPlayer({ config }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPos?.lat, currentPos?.lon, config.landmarks]);
 
-  const togglePlay = () => setPlaying((p) => !p);
-
   return (
     <div className="reel">
       <div className="reel-map">
@@ -119,7 +176,7 @@ export default function ReelPlayer({ config }) {
           currentPos={currentPos}
           isJourneyActive={playing}
           onLandmarkClick={() => {}}
-          onMapReady={(map) => { mapRef.current = map; }}
+          onMapReady={handleMapReady}
         />
       </div>
 
@@ -127,6 +184,12 @@ export default function ReelPlayer({ config }) {
         <span className="reel-eyebrow">{config.subtitle || config.region?.state}</span>
         <h2 className="reel-title">{config.title}</h2>
       </div>
+
+      <AutoCameraPill
+        mode={interactionMode}
+        manualKey={manualKey}
+        onToggle={togglePill}
+      />
 
       {activeLandmark && (
         <div className="reel-postcard" role="region" aria-label="Landmark postcard">
@@ -144,11 +207,20 @@ export default function ReelPlayer({ config }) {
           className="reel-play"
           aria-label={playing ? "Pause reel" : "Play reel"}
           aria-pressed={playing}
-          onClick={togglePlay}
+          onClick={() => setPlaying((p) => !p)}
         >
           {playing ? "❚❚" : "▶"}
         </button>
-        <div className="reel-progress" aria-hidden="true">
+        <div
+          className="reel-progress"
+          role="slider"
+          aria-label="Scrub through journey"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(progressRef.current * 100)}
+          onClick={handleProgressScrub}
+          onTouchStart={handleProgressScrub}
+        >
           <div
             className="reel-progress-fill"
             style={{ width: `${Math.round(progressRef.current * 100)}%` }}
