@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.5] - 2026-05-12
+
+### Added
+- `src/services/moodCamera.js` — pure mood-cadence camera engine. Two strategies:
+  - **`terrainHeuristic`** — elevation-driven. Steep sections → higher pitch + tighter zoom; flat → lower pitch + wider zoom. Outputs 8 evenly-spaced `CameraStep`s with `t`, `zoom`, `pitch`, `bearing`.
+  - **`railHeuristic`** — event-density-driven. Counts rail-feature landmarks (`bridge`, `tunnel`, `station`, `river-crossing`, `viaduct`) within 10 km of the current position; density drives pitch (22–50) and zoom; lower baseline pitch so the route reads as scenic parallel motion. High-density moments hold 0.8 s.
+  - **`planCamera(config)`** strategy router: explicit `cameraStrategy` > `mode === "rail"` > terrain default. A baked `config.cameraPlan` is used verbatim if present.
+  - **`sampleCameraPlan(plan, t)`** — linear interpolation between adjacent steps, clamps at the ends.
+- `MapView` now accepts an optional `onMapReady(map)` callback so external camera drivers can take the MapLibre handle.
+- Tests: 28 new — `clamp`, `profileStats`, `localSlope`, terrain heuristic across flat/steep/rolling/degenerate profiles, rail heuristic with dense / empty / non-rail landmarks, `planCamera` routing, `sampleCameraPlan` interpolation + bounds.
+
+### Changed
+- `ReelPlayer` now drives the camera via a **ref-held rAF loop** that calls `map.jumpTo()` directly — no React state on the per-frame path. Marker position + progress bar still update via React but throttled to ~5 fps (200 ms). This is reviewer correction #5 from the v3.0 autoplan: keep React out of the hot path so Pixel 6a stays above 24 fps on terrain + overlay composition.
+- Tirupati reel now exhibits real mood-cadence playback: pitch tightens on the steep climb toward the temple, bearing sweeps gently for visual variety, camera tracks the marker along the route.
+
 ## [1.0.4] - 2026-05-12
 
 ### Added
