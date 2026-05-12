@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0] - 2026-05-12 — Memory Reels ship 🎬
+
+**v3.0 Memory Reels feed-first** lands as **v1.1.0**. Tirupati's atlas stays unchanged on desktop; portrait viewports and `?surface=reels` get the new vertical surface with mood-cadence cinematography, manual-override pill, and three additional curated Indian journeys.
+
+### Added (this PR — Slice 8 only)
+- `src/services/perfProbe.js` — pure FPS scorer (`scoreFrames`) + runtime sampler (`startProbe`). Median frame-time over 5 s of playback; if median > 41 ms (≈ 24 fps) and at least 30 samples collected, the verdict is `shouldDisableTerrain: true`.
+- `MapView` opt-in `enablePerfProbe` prop. Reels surface turns it on; if Pixel-6a-class hardware can't sustain 24 fps, `map.setTerrain(null)` for the rest of the session — better to drop to 2D than ship visible jank.
+- `MapView` opt-in `mobileTerrainCap` prop. Reels surface passes `1.3` so the Tirupati 1.5 default gets clamped on portrait viewports. Atlas is unaffected.
+- `clampTerrain` helper for the terrain-exaggeration clamp.
+- Tests: 13 new — `scoreFrames` median/p95/threshold semantics (8) + `clampTerrain` cap behavior (5).
+
+### Changed (since v1.0.10)
+- `README.md` describes the v1.1.0 vertical surface + four curated journeys.
+- `TODOS.md` created with deferred items: Slice 6b OpenRailwayMap polyline import, live train positions, Bhuvan proxy deploy, and the full v3.1 roadmap (composer, WebCodecs export, AI scaffold).
+
+### v3.0 ship summary (cumulative across slices 0.5 – 8)
+- Vertical 9:16 Reels surface with aspect-ratio routing (URL + `localStorage` override)
+- 4 curated India journeys (Tirupati, Srirangam → Trichy, Yadagiri Hill, Konkan Railway)
+- Mood-cadence camera with two strategies (terrain elevation-driven, rail event-density-driven)
+- Manual override pill with 5 s no-touch auto-resume + 30 ms haptic
+- Tile fallback chain (ESRI → OSM → Bhuvan-via-Cloudflare-Worker)
+- Bhuvan proxy Worker scaffold with HMAC tokens, HTML-200 error detection, 60 s error cache
+- Postcard polish pipeline + manifest + CI verifier (opt-in; v3.0 ships with hand-written prose)
+- Reduced-motion + accessibility wins (`prefers-reduced-motion`, ARIA slider, ≥ 44 pt touch targets)
+- Runtime FPS probe + terrain auto-disable for low-end Android
+- 146 tests across 13 files; CI runs `npm test` + `polish:check` on every push
+
 ## [1.0.10] - 2026-05-12
 
 ### Added

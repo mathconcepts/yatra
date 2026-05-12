@@ -6,6 +6,7 @@ import {
   recordFailure as chainRecordFailure,
   tryFlush as chainTryFlush,
 } from "../services/tileSourceChain";
+import { clampTerrain, startProbe } from "../services/perfProbe";
 
 /**
  * MapLibre GL JS wrapper. Handles:
@@ -26,6 +27,8 @@ export default function MapView({
   onLandmarkClick,
   onMapReady,
   enableTileChain = false,
+  enablePerfProbe = false,
+  mobileTerrainCap,        // optional number, e.g. 1.3 — clamps terrainExaggeration
 }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
@@ -62,11 +65,16 @@ export default function MapView({
     mapRef.current = map;
 
     map.on("style.load", () => {
-      // 3D terrain
+      // 3D terrain — vertical Reels surface clamps exaggeration via
+      // mobileTerrainCap (reviewer correction #5: Pixel 6a perf budget).
+      const baseExag = config.topography.terrainExaggeration ?? 1.8;
+      const exag = typeof mobileTerrainCap === "number"
+        ? clampTerrain(baseExag, mobileTerrainCap)
+        : baseExag;
       try {
         map.setTerrain({
           source: "terrain",
-          exaggeration: config.topography.terrainExaggeration ?? 1.8,
+          exaggeration: exag,
         });
       } catch (e) { console.warn("Terrain setup failed:", e); }
 
@@ -85,6 +93,7 @@ export default function MapView({
       addOverlays();
       isStyleLoadedRef.current = true;
       if (enableTileChain) installTileChain(map);
+      if (enablePerfProbe) installPerfProbe(map);
       // External camera drivers (e.g. ReelPlayer's mood-cadence loop) get
       // the map handle here. Called once per init.
       if (typeof onMapReady === "function") onMapReady(map);
@@ -127,6 +136,26 @@ export default function MapView({
     };
     map.on("error", onError);
     map.on("moveend", trySwap);
+  }
+
+  /* ─── runtime FPS probe ────────────────────────────────────────────
+     Reviewer correction #5: sample frame-time over the first 5 s of
+     reel playback. If median > 41 ms (≈ 24 fps), disable terrain for
+     the rest of the session — better to drop to 2D than ship jank on
+     a Pixel 6a. Opt-in via `enablePerfProbe`. */
+  function installPerfProbe(map) {
+    const probe = startProbe();
+    const stopAt = window.setTimeout(() => {
+      const verdict = probe.stop();
+      if (verdict.shouldDisableTerrain) {
+        try { map.setTerrain(null); } catch { /* maplibre version skew */ }
+        // eslint-disable-next-line no-console
+        console.info(
+          `[perfProbe] median ${verdict.medianMs.toFixed(1)}ms over ${verdict.sampleCount} frames — terrain disabled for session`,
+        );
+      }
+    }, 5000);
+    map.once("remove", () => window.clearTimeout(stopAt));
   }
 
   /* ─── helpers: add / update overlay sources & layers ──────────────── */

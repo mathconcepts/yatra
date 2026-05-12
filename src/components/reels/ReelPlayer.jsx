@@ -179,6 +179,8 @@ export default function ReelPlayer({ config }) {
           onLandmarkClick={() => {}}
           onMapReady={handleMapReady}
           enableTileChain
+          enablePerfProbe
+          mobileTerrainCap={1.3}
         />
       </div>
 
