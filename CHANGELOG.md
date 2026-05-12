@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.3] - 2026-05-12
+
+### Added
+- `SurfaceRouter` component routes between the existing landscape Atlas and the new vertical Reels surface based on viewport aspect ratio (`portrait || min-dim < 768` → Reels). User choice persists in URL (`?surface=reels|atlas`) and `localStorage`. Resize listener is debounced 250ms.
+- `pickSurface(w, h, urlOverride, stored)` exported as a pure function for direct testing.
+- `ReelsPlaceholder` component as the v3.0 Slice 1 stub for the Reels surface. Slice 2 replaces it with the real `ReelFeed` + `ReelPlayer`.
+- "Reels mode" floating button on the Atlas surface to opt in manually.
+- `LocationConfig.mode` (foot / road / rail / mixed) and `LocationConfig.cameraPlan` as optional schema fields for future v3.0 surfaces. Existing configs are unaffected.
+- Tests: 14 new (pure-function decision matrix for `pickSurface`, atlas-render integration, P9 regression on the Tirupati config).
+
+### Changed
+- `App.jsx` now wraps the existing Atlas view in `SurfaceRouter`. Desktop users see the same Tirupati journey they always have.
+- The Reels bundle is code-split out of the desktop entry chunk via dynamic `import()` — `ReelsPlaceholder-*.js` ships as its own asset and only loads when the Reels surface is requested.
+
 ## [1.0.2] - 2026-05-12
 
 ### Added

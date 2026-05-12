@@ -1,14 +1,14 @@
 import { useState } from "react";
 import JourneyMap from "./components/JourneyMap";
+import SurfaceRouter from "./components/SurfaceRouter";
 import { LOCATIONS } from "./config";
 
 export default function App() {
   const [locationId, setLocationId] = useState(Object.keys(LOCATIONS)[0]);
   const config = LOCATIONS[locationId];
 
-  return (
+  const atlas = (
     <div className="jm-root">
-      {/* Location switcher — top-right floating */}
       {Object.keys(LOCATIONS).length > 1 && (
         <div className="jm-location-switcher">
           <span className="jm-switcher-label">Location</span>
@@ -21,5 +21,9 @@ export default function App() {
       )}
       <JourneyMap config={config} />
     </div>
+  );
+
+  return (
+    <SurfaceRouter atlas={atlas} locationId={locationId} locations={LOCATIONS} />
   );
 }

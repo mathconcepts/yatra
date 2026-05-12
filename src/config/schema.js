@@ -22,6 +22,17 @@
  * @property {Route[]}    routes    ★ one or more paths (min 1)
  * @property {Landmark[]} landmarks   POIs that trigger postcards
  *
+ * @property {"foot"|"road"|"rail"|"mixed"} [mode]   travel mode for the
+ *                                                    journey overall; used
+ *                                                    by the Reels surface
+ *                                                    to pick a camera
+ *                                                    strategy. Optional;
+ *                                                    defaults to "foot".
+ * @property {CameraStep[]} [cameraPlan]   pre-baked mood-cadence camera
+ *                                          plan for vertical playback.
+ *                                          Optional; generated at build
+ *                                          time by moodCamera.js.
+ *
  * @property {Topography} topography  basemap & zoom defaults
  * @property {Region}     region      political / jurisdictional info
  * @property {Culture}    culture     contextual storytelling
@@ -78,6 +89,13 @@
  * @property {"km"|"mi"} distance
  * @property {"m"|"ft"}  elevation
  * @property {"C"|"F"}   temperature
+ *
+ * @typedef {Object} CameraStep
+ * @property {number} t        progress along the route, 0..1
+ * @property {number} zoom     MapLibre zoom
+ * @property {number} pitch    0..60 (mobile is clamped to 60)
+ * @property {number} bearing  0..360
+ * @property {number} [holdMs] optional hold duration at this step
  */
 
 export {};
