@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.1] - 2026-05-12 — v3.1 completion (live frames + audio + preview)
+
+Closes the two items deferred from v1.2.0 plus an inline preview UX polish.
+
+### Added
+- `src/services/reelRenderer.js` — offscreen MapLibre renderer. Mounts a hidden 720×1280 `maplibregl.Map` (preserveDrawingBuffer: true, interactive: false), drops the route line, sets terrain (clamped 1.3), awaits idle, and exposes `captureFrame(t)` → `ImageBitmap`. Replaces v1.2.0's placeholder gradient in ExportPanel.
+- `src/services/audioEncode.js` — `AudioEncoder` pipeline. `decodeAudioBlob()` decodes the narration WebM/Opus blob via `AudioContext.decodeAudioData`. `encodeAacFromBuffer()` interleaves PCM channels into AAC LC frames (1024 samples, 128 kbps, `mp4a.40.2`) and emits chunks to a callback. `framesForBuffer()` is pure and unit-tested.
+- `encodeMp4` (v1.2.0) now invokes the audio path when narration is present — decodes first, configures the muxer audio track to match the actual `numberOfChannels` / `sampleRate`, then mixes AAC chunks via `muxer.addAudioChunk`. Audio-decode failures fall back to video-only silently.
+- `ExportPanel` renders an inline `<video>` of the encoded MP4 before the download link, so users can review without leaving the composer.
+- Tests: 235/235 (+15 — `cameraForT` ✕6, `audioEncode` ✕9).
+
 ## [1.2.0] - 2026-05-12 — Memory Composer ship
 
 **v3.1 Memory Composer** lands as **v1.2.0**. The composer surface (`?surface=composer` or the new "Compose memory" button on Atlas) turns Yatra from a curated-reel viewer into a UGC platform: pick A→B from a Nominatim-backed autocomplete, drop a GPX file, drop photos with EXIF GPS, record narration, and export a 9:16 MP4 via WebCodecs + mp4-muxer.

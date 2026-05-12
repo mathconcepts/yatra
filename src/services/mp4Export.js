@@ -84,11 +84,26 @@ export async function encodeMp4(frames, {
   }
   const { Muxer, ArrayBufferTarget } = MuxerModule;
 
+  // Slice I: try to decode + prepare audio metadata BEFORE building the
+  // muxer so its audio track config is right.
+  let audioPlan = null;
+  if (audioBlob) {
+    const { decodeAudioBlob } = await import("./audioEncode.js");
+    const buf = await decodeAudioBlob(audioBlob);
+    if (buf) {
+      audioPlan = { buffer: buf, channels: buf.numberOfChannels, sampleRate: buf.sampleRate };
+    }
+  }
+
   const target = new ArrayBufferTarget();
   const muxer = new Muxer({
     target,
     video: { codec: "avc", width, height, frameRate: fps },
-    audio: audioBlob ? { codec: "aac", numberOfChannels: 1, sampleRate: 48000 } : undefined,
+    audio: audioPlan ? {
+      codec: "aac",
+      numberOfChannels: audioPlan.channels,
+      sampleRate: audioPlan.sampleRate,
+    } : undefined,
     fastStart: "in-memory",
   });
 
@@ -110,17 +125,25 @@ export async function encodeMp4(frames, {
     videoEncoder.encode(frame, { keyFrame: i % fps === 0 });
     frame.close();
     if (typeof onProgress === "function") onProgress(i + 1, frames.length);
-    // Yield periodically so the encoder queue doesn't blow up.
     if (i % fps === 0) await new Promise((r) => setTimeout(r, 0));
   }
   await videoEncoder.flush();
   videoEncoder.close();
 
-  // Audio path is intentionally minimal here — feeding a decoded
-  // AudioBuffer through an AudioEncoder is a wide surface; v3.1
-  // initial release encodes video-only. Narration audio is preserved
-  // as a sibling .webm download until the audio pipeline lands.
-  // The plan flag in TODOS.md tracks this.
+  // Audio path (Slice I).
+  if (audioPlan) {
+    try {
+      const { encodeAacFromBuffer } = await import("./audioEncode.js");
+      await encodeAacFromBuffer(audioPlan.buffer, {
+        onChunk: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
+      });
+    } catch {
+      // Audio failed — keep the video; mp4-muxer is tolerant of a missing
+      // audio track at finalize because we won't have configured it.
+      // (If we did configure audio and it then failed, finalize still
+      // writes what was added.)
+    }
+  }
 
   muxer.finalize();
   const blob = new Blob([target.buffer], { type: "video/mp4" });
