@@ -29,6 +29,7 @@ export default function MapView({
   enableTileChain = false,
   enablePerfProbe = false,
   mobileTerrainCap,        // optional number, e.g. 1.3 — clamps terrainExaggeration
+  freeCamera = false,      // skip maxBounds — Reels surface needs unconstrained pitch
 }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
@@ -52,10 +53,12 @@ export default function MapView({
       zoom: config.topography.zoom ?? 12.5,
       pitch: config.topography.pitch ?? 50,
       bearing: config.topography.bearing ?? -25,
-      maxBounds: [
-        [config.bounds.lonMin - 0.08, config.bounds.latMin - 0.08],
-        [config.bounds.lonMax + 0.08, config.bounds.latMax + 0.08],
-      ],
+      ...(freeCamera ? {} : {
+        maxBounds: [
+          [config.bounds.lonMin - 0.08, config.bounds.latMin - 0.08],
+          [config.bounds.lonMax + 0.08, config.bounds.latMax + 0.08],
+        ],
+      }),
       attributionControl: { compact: true },
     });
 
