@@ -1,6 +1,11 @@
 import { useEffect, useRef } from "react";
 import maplibregl from "maplibre-gl";
-import { makeMapStyle } from "../services/basemapStyles";
+import { makeMapStyle, tilesForSource } from "../services/basemapStyles";
+import {
+  createChain,
+  recordFailure as chainRecordFailure,
+  tryFlush as chainTryFlush,
+} from "../services/tileSourceChain";
 
 /**
  * MapLibre GL JS wrapper. Handles:
@@ -20,6 +25,7 @@ export default function MapView({
   isJourneyActive,
   onLandmarkClick,
   onMapReady,
+  enableTileChain = false,
 }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
@@ -78,6 +84,7 @@ export default function MapView({
 
       addOverlays();
       isStyleLoadedRef.current = true;
+      if (enableTileChain) installTileChain(map);
       // External camera drivers (e.g. ReelPlayer's mood-cadence loop) get
       // the map handle here. Called once per init.
       if (typeof onMapReady === "function") onMapReady(map);
@@ -90,6 +97,37 @@ export default function MapView({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /* ─── tile source chain: ESRI → OSM → Bhuvan (proxy) ───────────────
+     Opt-in via `enableTileChain` so the Atlas surface stays unchanged.
+     The chain watches for raster tile errors and, after threshold
+     crossings, swaps the basemap source's tile URLs in-place via
+     `setTiles()` so we don't have to rebuild the style. */
+  function installTileChain(map) {
+    let chain = createChain();
+    const onError = (e) => {
+      // Only count raster tile errors. MapLibre fires many `error`
+      // events; we care about the ones with a tile + source = 'basemap'.
+      if (!e || !e.tile || e.sourceId !== "basemap") return;
+      chain = chainRecordFailure(chain, performance.now());
+      // If we crossed threshold and the map is currently idle, swap
+      // immediately. Otherwise leave it pending until moveend.
+      if (chain.pendingSwap && !map.isMoving()) trySwap();
+    };
+    const trySwap = () => {
+      const { state, swapped } = chainTryFlush(chain);
+      chain = state;
+      if (!swapped) return;
+      const next = chain.sources[chain.activeIndex];
+      const tiles = tilesForSource(next);
+      const src = map.getSource("basemap");
+      if (tiles && src && typeof src.setTiles === "function") {
+        src.setTiles(tiles);
+      }
+    };
+    map.on("error", onError);
+    map.on("moveend", trySwap);
+  }
 
   /* ─── helpers: add / update overlay sources & layers ──────────────── */
   function addOverlays() {

@@ -1,0 +1,8 @@
+name = "yatra-bhuvan-proxy"
+main = "src/index.ts"
+compatibility_date = "2026-05-12"
+
+# Secrets (set via `wrangler secret put`):
+#   TOKEN_SECRET     — HMAC signing secret (32+ random bytes, base64)
+#   BHUVAN_BASE      — optional; upstream URL override
+#   ALLOWED_ORIGIN   — CORS origin (e.g. https://yatra.example.com)
