@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import MapView from "../MapView";
 import { interpolateRoute } from "../../utils/route";
 import { planCamera, sampleCameraPlan } from "../../services/moodCamera";
+import { polishedBlurb } from "../../services/polishedPostcards";
 import AutoCameraPill from "./AutoCameraPill";
 
 const LOOP_SECONDS = 22;          // one full traversal
@@ -195,7 +196,9 @@ export default function ReelPlayer({ config }) {
       {activeLandmark && (
         <div className="reel-postcard" role="region" aria-label="Landmark postcard">
           <div className="reel-postcard-name">{activeLandmark.name}</div>
-          <p className="reel-postcard-body">{activeLandmark.blurb}</p>
+          <p className="reel-postcard-body">
+            {polishedBlurb(config.id, activeLandmark.id) || activeLandmark.blurb}
+          </p>
           {activeLandmark.ritual && (
             <div className="reel-postcard-ritual">{activeLandmark.ritual}</div>
           )}
