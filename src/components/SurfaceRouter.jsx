@@ -1,13 +1,15 @@
 import { useState, useEffect, lazy, Suspense } from "react";
+import { readMemoryFromUrl } from "../services/shareLink";
 
 // Reels is lazy so the desktop bundle does not pull in reels code.
 // See ~/.gstack/projects/mathconcepts-yatra/root-main-v3-0-plan-20260512-144026.md
 // (reviewer correction #9: dynamic import gate).
 const Reels = lazy(() => import("./reels/ReelFeed.jsx"));
 const Composer = lazy(() => import("./composer/MemoryComposer.jsx"));
+const Memories = lazy(() => import("./memories/MemoryGallery.jsx"));
 
 const STORAGE_KEY = "yatra.surface";
-const VALID_SURFACES = ["atlas", "reels", "composer"];
+const VALID_SURFACES = ["atlas", "reels", "composer", "memories"];
 
 /**
  * Pure decision: pick the right surface for a viewport.
@@ -58,6 +60,13 @@ function readSize() {
 export default function SurfaceRouter({ atlas, locationId, locations }) {
   const [size, setSize] = useState(readSize);
   const [override, setOverride] = useState(() => readURLOverride() || readStoredOverride());
+  // A shared / saved memory routed in via ?memory=... or opened from the
+  // gallery. When set, replaces the curated locations list with this
+  // single config so ReelFeed renders it as the only reel.
+  const [memoryOverride, setMemoryOverride] = useState(() => {
+    if (typeof window === "undefined") return null;
+    return readMemoryFromUrl(window.location.href);
+  });
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -99,13 +108,30 @@ export default function SurfaceRouter({ atlas, locationId, locations }) {
     );
   }
 
+  if (surface === "memories") {
+    return (
+      <Suspense fallback={<div className="jm-loading" role="status">Loading…</div>}>
+        <Memories
+          onCancel={() => switchSurface("atlas")}
+          onOpen={(cfg) => { setMemoryOverride(cfg); switchSurface("reels"); }}
+        />
+      </Suspense>
+    );
+  }
+
   if (surface === "reels") {
+    // When a memory was routed in (shared URL or opened from gallery),
+    // ReelFeed sees a one-key locations map containing just that config.
+    const effectiveLocations = memoryOverride
+      ? { [memoryOverride.id || "shared"]: memoryOverride }
+      : locations;
+    const effectiveId = memoryOverride ? (memoryOverride.id || "shared") : locationId;
     return (
       <Suspense fallback={<div className="jm-loading" role="status">Loading…</div>}>
         <Reels
-          locationId={locationId}
-          locations={locations}
-          onSwitchToAtlas={() => switchSurface("atlas")}
+          locationId={effectiveId}
+          locations={effectiveLocations}
+          onSwitchToAtlas={() => { setMemoryOverride(null); switchSurface("atlas"); }}
         />
       </Suspense>
     );
@@ -122,6 +148,14 @@ export default function SurfaceRouter({ atlas, locationId, locations }) {
           aria-label="Compose a memory"
         >
           Compose memory
+        </button>
+        <button
+          type="button"
+          className="jm-surface-toggle"
+          onClick={() => switchSurface("memories")}
+          aria-label="View saved memories"
+        >
+          My memories
         </button>
         <button
           type="button"

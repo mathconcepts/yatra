@@ -50,4 +50,10 @@ describe("pickSurface", () => {
   it("composer stored preference beats viewport (v3.1)", () => {
     expect(pickSurface(1280, 800, null, "composer")).toBe("composer");
   });
+
+  it("memories surface honored as override or stored preference (v3.2)", () => {
+    expect(pickSurface(1280, 800, "memories", null)).toBe("memories");
+    expect(pickSurface(375, 812, "memories", null)).toBe("memories");
+    expect(pickSurface(1280, 800, null, "memories")).toBe("memories");
+  });
 });

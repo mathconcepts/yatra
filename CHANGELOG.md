@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0] - 2026-05-12 — Memory gallery + share URLs (v3.2)
+
+Composed memories can now be saved locally and shared via URL — no backend, no upload.
+
+### Added
+- `src/services/memoryStore.js` — localStorage CRUD over a versioned schema (`yatra.memories.v1`). `sanitizeForStorage` strips blob-URL fields (`landmark.photoUrl`, `narrationUrl`) that wouldn't survive a reload; persistent media is tracked as a v3.3 polish item. Quota-exceeded path retries with a half-sized list before giving up.
+- `src/services/shareLink.js` — pure base64url codec over a hand-compacted LocationConfig representation (short single-letter keys, `[lat,lon,elev]` tuples). 10-waypoint reel encodes to ~1-3 KB, full Konkan to ~6 KB, 500-point GPX to ~25-30 KB. Above 24 KB the encoder automatically drops waypoint elevations to save bytes.
+- `src/components/memories/MemoryGallery.jsx` — grid surface for saved memories. Each card surfaces Open / Share / Delete. Share copies a `?surface=reels&memory=<base64>` URL to clipboard (falls back to `window.prompt` when clipboard access is denied).
+- `MemoryComposer` — three actions after the form is ready: Preview reel, Save memory, Share link. Inline `aria-live` notice confirms each action.
+- `SurfaceRouter` — accepts `memories` as a valid URL/storage override. URL-fragment routing: any incoming `?memory=…` is decoded on first paint and routed to reels with the shared config as the only reel.
+- Tests: 258/258 (+23 — memoryStore ✕13, shareLink ✕10, surface-router +3).
+
 ## [1.2.1] - 2026-05-12 — v3.1 completion (live frames + audio + preview)
 
 Closes the two items deferred from v1.2.0 plus an inline preview UX polish.
