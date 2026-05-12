@@ -13,6 +13,8 @@ import PhotoDrop from "./PhotoDrop";
 import NarrationRecorder from "./NarrationRecorder";
 import ExportPanel from "./ExportPanel";
 import AiScaffoldInput from "./AiScaffoldInput";
+import { saveMemory } from "../../services/memoryStore";
+import { encodeMemoryUrl } from "../../services/shareLink";
 
 /**
  * Memory Composer — Slice A scaffold (v3.1).
@@ -88,6 +90,32 @@ export default function MemoryComposer({ onPreview, onCancel }) {
   const handlePreview = () => {
     const cfg = toLocationConfig(state);
     if (cfg && typeof onPreview === "function") onPreview(cfg);
+  };
+
+  const [savedNotice, setSavedNotice] = useState(null);
+  const handleSave = () => {
+    const cfg = toLocationConfig(state);
+    if (!cfg) return;
+    const entry = saveMemory(cfg);
+    setSavedNotice(entry ? "Saved to My memories." : "Couldn't save (storage full?).");
+    setTimeout(() => setSavedNotice(null), 2500);
+  };
+
+  const [shareNotice, setShareNotice] = useState(null);
+  const handleShare = async () => {
+    const cfg = toLocationConfig(state);
+    if (!cfg) return;
+    const enc = encodeMemoryUrl(cfg);
+    if (!enc) { setShareNotice("Could not encode."); return; }
+    const url = `${window.location.origin}${window.location.pathname}?surface=reels&memory=${enc}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setShareNotice("Share URL copied to clipboard.");
+    } catch {
+      window.prompt("Copy this share URL:", url);
+      setShareNotice("URL ready above.");
+    }
+    setTimeout(() => setShareNotice(null), 2500);
   };
 
   const ready = isReadyToPreview(state);
@@ -174,7 +202,25 @@ export default function MemoryComposer({ onPreview, onCancel }) {
           >
             Preview reel
           </button>
+          <button
+            type="button"
+            className="composer-preview"
+            onClick={handleSave}
+            disabled={!ready}
+          >
+            Save memory
+          </button>
+          <button
+            type="button"
+            className="composer-preview"
+            onClick={handleShare}
+            disabled={!ready}
+          >
+            Share link
+          </button>
         </div>
+        {savedNotice && <p className="composer-hint composer-saved">{savedNotice}</p>}
+        {shareNotice && <p className="composer-hint composer-saved">{shareNotice}</p>}
       </form>
     </div>
   );
