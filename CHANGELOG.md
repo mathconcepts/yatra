@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.8] - 2026-05-12
+
+### Added
+- **Srirangam → Trichy** (`src/config/srirangam-trichy.js`) — Sri Vaishnava river-island pilgrimage. 9.5 km foot+road from Ranganathaswamy temple to the Rock Fort, low elevation (78–95 m), 5 landmarks including Amma Mandapam ghat, Cauvery bridge, Teppakulam tank.
+- **Yadagiri Hill** (`src/config/yadagirigutta.js`) — Telangana hill pilgrimage to Sri Lakshmi Narasimha Swamy. 3.2 km mixed road + foot, 485 → 720 m elevation gain, 5 landmarks including the Pancha Narasimha cave, Rajagopuram (carved from black Krishna-shila granite), and the 2022-reconsecrated sanctum.
+- **Konkan Railway** (`src/config/konkan-railway.js`) — Mumbai CST → Mangaluru Junction, 738 km, `mode: "rail"` + `cameraStrategy: "rail"` to engage the rail mood-cadence preset built in Slice 3. 18 station/feature waypoints, 8 landmarks including the Karbude tunnel (6.5 km), Panval Nadi viaduct, Sharavati bridge, Roha (where the Konkan division begins).
+- Tests: 27 new — required-field shape per config (×4), waypoints stay inside declared bounds, region/culture metadata present, rail-specific config validates mode + strategy + rail-feature landmark presence, elevation profile sanity per topography type.
+
+### Changed
+- `src/config/index.js` registers all four locations. The location switcher in the Atlas surface now lists Tirupati, Srirangam, Yadagiri Hill, and Konkan Railway. The Reels surface paginates through all four with the existing ↓/↑ swipe and keyboard navigation.
+
 ## [1.0.7] - 2026-05-12
 
 ### Added
