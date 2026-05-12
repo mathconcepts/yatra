@@ -180,6 +180,7 @@ export default function ReelPlayer({ config }) {
           onMapReady={handleMapReady}
           enableTileChain
           enablePerfProbe
+          freeCamera
           mobileTerrainCap={1.3}
         />
       </div>

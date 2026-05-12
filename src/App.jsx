@@ -19,7 +19,7 @@ export default function App() {
           </select>
         </div>
       )}
-      <JourneyMap config={config} />
+      <JourneyMap key={config.id} config={config} />
     </div>
   );
 
