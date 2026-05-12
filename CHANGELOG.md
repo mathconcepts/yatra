@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2026-05-12 — Memory Composer ship
+
+**v3.1 Memory Composer** lands as **v1.2.0**. The composer surface (`?surface=composer` or the new "Compose memory" button on Atlas) turns Yatra from a curated-reel viewer into a UGC platform: pick A→B from a Nominatim-backed autocomplete, drop a GPX file, drop photos with EXIF GPS, record narration, and export a 9:16 MP4 via WebCodecs + mp4-muxer.
+
+### Added (v3.1 Slices A–G)
+- `src/components/composer/` — full composer scaffold: `MemoryComposer.jsx` (form + state), `composer-state.js` (pure reducer + projection to LocationConfig), `PlacePicker.jsx`, `GpxImporter.jsx`, `PhotoDrop.jsx`, `NarrationRecorder.jsx`, `ExportPanel.jsx`, `AiScaffoldInput.jsx`.
+- `src/services/geocoder.js` — Nominatim client with hourly cache, abort-aware fetch, defensive parsing, swappable fetcher for tests.
+- `src/services/gpx.js` — zero-dependency GPX parser + Douglas-Peucker simplifier. Caps imports at 500 points.
+- `src/services/exif.js` — zero-dependency EXIF GPS extractor (walks JPEG APP1 / TIFF IFDs). Returns `{lat, lon}` or `null`.
+- `src/services/mp4Export.js` — WebCodecs `VideoEncoder` + `mp4-muxer` pipeline. Feature-detects, frame-plans, encodes H.264 AVC1 MP4 at 720×1280, 30 fps. Yields per-second so the encoder queue doesn't blow up on Pixel-class hardware.
+- `src/services/aiScaffold.js` — free-text → candidate place names → Nominatim-verified waypoints. Sentence-start verb stripping, importance floor 0.35, narrative ordering.
+- `SurfaceRouter` accepts `composer` as a valid URL/storage override. Atlas surface gains a "Compose memory" toggle alongside "Reels mode".
+- Tests: 220/220 (+74 — composer-state ✕12, surface-router ✕2, geocoder ✕16, route-builder ✕6, gpx ✕8, exif ✕7, mp4-export ✕10, ai-scaffold ✕13).
+- Dependencies: `mp4-muxer ^5.2.2`.
+
+### Deferred to TODOS
+- ExportPanel currently renders a placeholder gradient + title card per frame; wiring it to the live MapLibre canvas needs cross-surface frame capture (next slice).
+- Audio path is video-only for the initial release; narration is preserved as a sibling URL until the `AudioEncoder` plumbing lands.
+- LLM-based extract for `aiScaffold` (multi-word lowercase places, semantic dedupe). Today's heuristic handles capitalized proper nouns.
+
 ## [1.1.0] - 2026-05-12 — Memory Reels ship 🎬
 
 **v3.0 Memory Reels feed-first** lands as **v1.1.0**. Tirupati's atlas stays unchanged on desktop; portrait viewports and `?surface=reels` get the new vertical surface with mood-cadence cinematography, manual-override pill, and three additional curated Indian journeys.
