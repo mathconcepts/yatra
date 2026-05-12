@@ -1,0 +1,307 @@
+/* ════════════════════════════════════════════════════════════════════
+ *  JOURNEY ATLAS · stylesheet
+ *  Editorial topographic-atlas aesthetic:
+ *    deep ink background, parchment side cards, saffron accents
+ * ════════════════════════════════════════════════════════════════════ */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, #root { margin: 0; padding: 0; min-height: 100%; }
+body {
+  font-family: 'Manrope', system-ui, sans-serif;
+  color: #ede4d3;
+  background: radial-gradient(ellipse at 30% 0%, #1a2a3d 0%, #0d1a26 55%, #07111a 100%);
+  letter-spacing: 0.005em;
+  overflow-x: hidden;
+}
+
+.jm-root { min-height: 100vh; position: relative; }
+.jm-app  { padding: 22px 26px 32px; }
+
+.jm-display { font-family: 'Cormorant Garamond', Georgia, serif; font-weight: 600; letter-spacing: -0.01em; }
+.jm-mono    { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+/* ─── location switcher (only shows with multiple locations) ─── */
+.jm-location-switcher {
+  position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
+  z-index: 999; display: flex; gap: 10px; align-items: center;
+  background: rgba(13, 26, 38, 0.85); backdrop-filter: blur(10px);
+  border: 1px solid rgba(244, 232, 208, 0.12); border-radius: 8px;
+  padding: 6px 12px; font-size: 0.8rem;
+}
+.jm-switcher-label { color: #8895a5; letter-spacing: 0.12em; text-transform: uppercase; font-size: 0.65rem; }
+.jm-location-switcher select {
+  background: transparent; color: #ede4d3; border: none; font-family: inherit;
+  font-size: 0.85rem; font-weight: 600; cursor: pointer; outline: none;
+}
+.jm-location-switcher select option { background: #0d1a26; color: #ede4d3; }
+
+/* ─── header ─── */
+.jm-header {
+  display: flex; justify-content: space-between; align-items: flex-end;
+  margin-bottom: 18px; gap: 24px; flex-wrap: wrap;
+}
+.jm-title { font-size: 2.4rem; line-height: 1; color: #f5ebd6; margin: 0; }
+.jm-sub   { font-size: 0.82rem; color: #9aa8b5; margin-top: 6px; font-style: italic; }
+.jm-invocation { font-size: 0.92rem; letter-spacing: 0.04em; margin-top: 4px; }
+
+.jm-toolrow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.jm-tabs {
+  display: flex; gap: 4px;
+  background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px; padding: 4px;
+}
+.jm-tab {
+  padding: 7px 14px; border-radius: 5px; font-size: 0.77rem;
+  font-weight: 600; cursor: pointer; transition: all 0.18s;
+  color: #889; border: none; background: transparent; font-family: inherit;
+}
+.jm-tab.active { background: rgba(255, 255, 255, 0.08); color: #fff; }
+
+.jm-basemap {
+  display: flex; gap: 2px;
+  background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px; padding: 3px;
+}
+.jm-bm {
+  padding: 6px 10px; border-radius: 5px; font-size: 0.68rem;
+  font-weight: 600; cursor: pointer; color: #778; border: none;
+  background: transparent; font-family: inherit;
+  letter-spacing: 0.04em; text-transform: uppercase; transition: all 0.18s;
+}
+.jm-bm.active { color: #1a1208; }
+
+/* ─── main grid ─── */
+.jm-grid { display: grid; grid-template-columns: 1fr 320px; gap: 18px; }
+@media (max-width: 980px) { .jm-grid { grid-template-columns: 1fr; } }
+
+/* ─── map ─── */
+.jm-map-wrap {
+  background: #0a141d; border-radius: 12px; overflow: hidden;
+  border: 1px solid rgba(244, 232, 208, 0.09); position: relative;
+}
+.jm-map-canvas { width: 100%; height: 560px; }
+
+/* ─── controls strip ─── */
+.jm-controls {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px;
+  background: rgba(0, 0, 0, 0.55);
+  border-top: 1px solid rgba(244, 232, 208, 0.06);
+}
+.jm-btn {
+  background: #ff9d3a; color: #1a1208; border: none;
+  padding: 9px 18px; border-radius: 6px;
+  font-family: inherit; font-weight: 700; font-size: 0.78rem;
+  cursor: pointer; letter-spacing: 0.02em;
+  transition: transform 0.12s, filter 0.12s;
+}
+.jm-btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+.jm-btn-ghost {
+  background: transparent; color: #aab5c0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.jm-bar {
+  flex: 1; height: 5px; background: rgba(255, 255, 255, 0.06);
+  border-radius: 3px; overflow: hidden;
+}
+.jm-bar-fill { height: 100%; transition: width 0.05s linear; }
+.jm-speed {
+  font-size: 0.72rem; color: #9aa8b5;
+  font-family: 'JetBrains Mono', monospace;
+  cursor: pointer; padding: 4px 8px; border-radius: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.jm-speed.active { background: rgba(255, 255, 255, 0.12); color: #fff; }
+
+/* ─── side cards ─── */
+.jm-side { display: flex; flex-direction: column; gap: 14px; }
+.jm-card {
+  position: relative;
+  background: linear-gradient(180deg, rgba(244, 232, 208, 0.05) 0%, rgba(244, 232, 208, 0.02) 100%);
+  border: 1px solid rgba(244, 232, 208, 0.09);
+  border-radius: 12px; padding: 18px; overflow: hidden;
+}
+.jm-grid > div > .jm-card { margin-top: 14px; }
+
+.jm-card-head {
+  font-size: 0.62rem; letter-spacing: 0.22em;
+  text-transform: uppercase; color: #8895a5;
+  margin-bottom: 12px; font-weight: 600;
+}
+
+.jm-meta-row {
+  display: flex; justify-content: space-between;
+  font-size: 0.78rem; padding: 7px 0;
+  border-bottom: 1px dashed rgba(244, 232, 208, 0.08);
+}
+.jm-meta-row:last-child { border-bottom: none; }
+.jm-meta-row span:first-child { color: #8895a5; }
+.jm-meta-row span:last-child  { color: #ede4d3; font-weight: 500; }
+
+.jm-weather-row { display: flex; align-items: center; margin-bottom: 12px; gap: 8px; }
+.jm-weather-big  { font-size: 2.2rem; line-height: 1; }
+.jm-weather-temp { font-size: 2.6rem; font-weight: 600; color: #f5ebd6; line-height: 1; }
+.jm-weather-cond { font-size: 0.74rem; color: #9aa8b5; margin-top: 2px; }
+.jm-loading-text { font-size: 0.78rem; color: #7a8595; }
+
+.jm-pills { margin-bottom: 10px; }
+.jm-pill {
+  display: inline-block;
+  font-size: 0.62rem; letter-spacing: 0.12em; text-transform: uppercase;
+  color: #ccc; padding: 3px 9px; border-radius: 99px;
+  background: rgba(255, 255, 255, 0.06);
+  margin-right: 4px; margin-bottom: 4px;
+}
+.jm-governing { font-size: 0.78rem; color: #c0c8d2; line-height: 1.5; }
+.jm-governing b { color: #f5ebd6; }
+.jm-advisory {
+  font-size: 0.77rem; line-height: 1.5; color: #c0c8d2;
+  padding: 6px 0; padding-left: 10px;
+  border-left: 2px solid #ff9d3a;
+  margin-bottom: 8px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+ *  MapLibre overrides + custom markers
+ * ═══════════════════════════════════════════════════════════════════ */
+.maplibregl-ctrl-attrib {
+  background: rgba(13, 26, 38, 0.7) !important;
+  color: #aab5c0 !important;
+  font-size: 9px !important;
+  font-family: 'JetBrains Mono', monospace !important;
+}
+.maplibregl-ctrl-attrib a { color: #c0c8d2 !important; }
+.maplibregl-ctrl-scale {
+  background: rgba(13, 26, 38, 0.8) !important;
+  border-color: rgba(244, 232, 208, 0.3) !important;
+  color: #ede4d3 !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 10px !important;
+}
+
+/* landmark markers */
+.jm-marker {
+  display: flex; align-items: center; gap: 6px;
+  cursor: pointer; pointer-events: auto;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+}
+.jm-marker-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: #fff; border: 2px solid #1a1208;
+  flex-shrink: 0;
+}
+.jm-marker-shrine .jm-marker-dot,
+.jm-marker-gateway .jm-marker-dot { width: 12px; height: 12px; }
+.jm-marker-destination .jm-marker-dot {
+  width: 16px; height: 16px;
+  background: var(--accent); border-color: #fff; border-width: 3px;
+  box-shadow: 0 0 0 3px var(--accent), 0 0 0 4px rgba(255, 255, 255, 0.3);
+  animation: jm-destination-pulse 2.5s ease-in-out infinite;
+}
+@keyframes jm-destination-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px var(--accent), 0 0 0 4px rgba(255, 255, 255, 0.3); }
+  50%      { box-shadow: 0 0 0 8px transparent, 0 0 0 10px rgba(255, 157, 58, 0.2); }
+}
+.jm-marker-label {
+  background: rgba(13, 26, 38, 0.85); color: #f5ebd6;
+  font-size: 11px; font-weight: 600; font-family: 'Manrope', sans-serif;
+  padding: 3px 8px; border-radius: 4px;
+  border: 1px solid rgba(244, 232, 208, 0.2);
+  white-space: nowrap;
+}
+
+.jm-endpoint-label {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.05rem; font-weight: 700; color: #fff;
+  letter-spacing: 0.06em;
+  text-shadow: 0 0 4px #07111a, 0 1px 2px #07111a, 0 -1px 2px #07111a, 1px 0 2px #07111a, -1px 0 2px #07111a;
+  pointer-events: none;
+}
+
+/* current journey marker */
+.jm-current-marker {
+  position: relative; width: 16px; height: 16px;
+  pointer-events: none;
+}
+.jm-current-marker .jm-dot {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--accent); border: 2.5px solid #fff;
+  box-shadow: 0 0 12px var(--accent);
+  z-index: 2;
+}
+.jm-current-marker .jm-pulse {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--accent);
+  animation: jm-pulse 1.8s ease-out infinite;
+}
+@keyframes jm-pulse {
+  0%   { transform: translate(-50%, -50%) scale(1);   opacity: 0.7; }
+  100% { transform: translate(-50%, -50%) scale(3.5); opacity: 0;   }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+ *  POSTCARD — the delight feature
+ * ═══════════════════════════════════════════════════════════════════ */
+.jm-postcard {
+  position: fixed; top: 50%; right: 32px; transform: translateY(-50%);
+  width: 340px; max-width: calc(100vw - 64px);
+  background: linear-gradient(155deg, #f4e8d0 0%, #ead7b3 100%);
+  color: #2c1810; border-radius: 4px;
+  padding: 24px 26px 22px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(244, 232, 208, 0.4);
+  z-index: 1000;
+  animation: jm-postcard-in 0.55s cubic-bezier(0.34, 1.56, 0.64, 1);
+  font-family: 'Manrope', sans-serif;
+  overflow: hidden; cursor: pointer;
+}
+.jm-postcard::before {
+  content: ""; position: absolute; top: 0; right: 0; width: 70px; height: 70px;
+  background: linear-gradient(225deg, transparent 49%, var(--accent) 49%, var(--accent) 51%, rgba(255, 157, 58, 0.15) 51%);
+  opacity: 0.7;
+}
+.jm-postcard::after {
+  content: ""; position: absolute; bottom: -2px; left: -2px; right: -2px; height: 2px;
+  background: repeating-linear-gradient(90deg, var(--accent) 0 8px, transparent 8px 14px);
+}
+@keyframes jm-postcard-in {
+  0%   { opacity: 0; transform: translateY(calc(-50% + 30px)) rotate(2deg)  scale(0.92); }
+  60%  { opacity: 1; transform: translateY(calc(-50% - 6px)) rotate(-1deg) scale(1.01); }
+  100% { opacity: 1; transform: translateY(-50%)              rotate(0deg)  scale(1); }
+}
+.jm-postcard-stamp {
+  font-size: 0.55rem; letter-spacing: 0.28em;
+  color: var(--accent); text-transform: uppercase; font-weight: 700;
+}
+.jm-postcard-title {
+  font-family: 'Cormorant Garamond', serif; font-size: 1.8rem; font-weight: 700;
+  color: #2c1810; line-height: 1.1; margin: 8px 0 4px;
+}
+.jm-postcard-loc {
+  font-family: 'JetBrains Mono', monospace; font-size: 0.62rem;
+  color: #6b4226; opacity: 0.7; letter-spacing: 0.04em; margin-bottom: 14px;
+}
+.jm-postcard-blurb {
+  font-size: 0.84rem; line-height: 1.55; color: #3d2818;
+  margin-bottom: 14px; font-style: italic;
+}
+.jm-postcard-ritual {
+  font-size: 0.7rem; color: var(--accent); font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  padding-top: 10px; border-top: 1px solid rgba(44, 24, 16, 0.15);
+}
+
+/* particle burst */
+.jm-burst { position: absolute; top: 20px; right: 30px; pointer-events: none; }
+.jm-burst span {
+  position: absolute; width: 6px; height: 6px;
+  border-radius: 50%; background: var(--accent);
+  animation: jm-burst 1.4s ease-out forwards;
+}
+@keyframes jm-burst {
+  0%   { transform: translate(0, 0)              scale(1); opacity: 1; }
+  100% { transform: translate(var(--dx), var(--dy)) scale(0); opacity: 0; }
+}
