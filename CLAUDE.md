@@ -80,3 +80,18 @@ Do not skip skills, ignore gstack errors, or work around missing gstack.
 Using gstack skills: After install, skills like /qa, /ship, /review, /investigate,
 and /browse are available. Use /browse for all web browsing.
 Use ~/.claude/skills/gstack/... for gstack file paths (the global path).
+
+## Testing
+
+- **Run:** `npm test` (single run) or `npm run test:watch` (watch mode).
+- **Tests live in:** `test/` directory, named `*.test.{js,jsx}` or `*.spec.{js,jsx}`.
+- **Framework:** Vitest + jsdom + @testing-library/react. Full conventions in `TESTING.md`.
+- **CI:** `.github/workflows/test.yml` runs on every push + PR.
+
+Test expectations:
+- 100% test coverage is the goal — tests make vibe coding safe.
+- New function → add a corresponding test.
+- Bug fix → write a regression test first.
+- New error handling → add a test that triggers the error.
+- New conditional (if/else, switch, ternary) → tests for BOTH paths.
+- Never commit code that makes existing tests fail.
