@@ -5,9 +5,13 @@
  * That's it — the UI picks it up automatically.
  */
 import tirupatiTirumala from "./tirupati-tirumala";
-// import otherLocation from "./other-location";
+import srirangamTrichy  from "./srirangam-trichy";
+import yadagirigutta    from "./yadagirigutta";
+import konkanRailway    from "./konkan-railway";
 
 export const LOCATIONS = {
   [tirupatiTirumala.id]: tirupatiTirumala,
-  // [otherLocation.id]: otherLocation,
+  [srirangamTrichy.id]:  srirangamTrichy,
+  [yadagirigutta.id]:    yadagirigutta,
+  [konkanRailway.id]:    konkanRailway,
 };
