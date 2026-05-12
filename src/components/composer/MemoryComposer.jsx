@@ -1,4 +1,4 @@
-import { useReducer, useCallback } from "react";
+import { useReducer, useCallback, useEffect } from "react";
 import {
   composerReducer,
   initialComposerState,
@@ -6,6 +6,8 @@ import {
   isReadyToPreview,
   toLocationConfig,
 } from "./composer-state";
+import { interpolateLineWaypoints } from "./route-builder";
+import PlacePicker from "./PlacePicker";
 
 /**
  * Memory Composer — Slice A scaffold (v3.1).
@@ -28,6 +30,17 @@ export default function MemoryComposer({ onPreview, onCancel }) {
 
   const setTitle = useCallback((v) => dispatch({ type: COMPOSER_ACTIONS.SET_TITLE, payload: v }), []);
   const setMode = useCallback((v) => dispatch({ type: COMPOSER_ACTIONS.SET_MODE, payload: v }), []);
+  const setOrigin = useCallback((v) => dispatch({ type: COMPOSER_ACTIONS.SET_ORIGIN, payload: v }), []);
+  const setDestination = useCallback((v) => dispatch({ type: COMPOSER_ACTIONS.SET_DESTINATION, payload: v }), []);
+
+  // When both endpoints are set, auto-interpolate a 10-point great-circle-ish
+  // path so the composer is immediately previewable. Slice C overrides this
+  // with imported GPX track data.
+  useEffect(() => {
+    if (!state.origin || !state.destination) return;
+    const wps = interpolateLineWaypoints(state.origin, state.destination, 10);
+    dispatch({ type: COMPOSER_ACTIONS.SET_WAYPOINTS, payload: wps });
+  }, [state.origin, state.destination]);
 
   const handlePreview = () => {
     const cfg = toLocationConfig(state);
@@ -71,10 +84,19 @@ export default function MemoryComposer({ onPreview, onCancel }) {
           ))}
         </fieldset>
 
-        <div className="composer-placeholder" data-testid="composer-route-picker">
-          <p className="composer-hint">
-            Origin / destination picker — Slice B
-          </p>
+        <div className="composer-route-pickers" data-testid="composer-route-picker">
+          <PlacePicker
+            label="Start"
+            value={state.origin}
+            onPick={setOrigin}
+            placeholder="e.g. Manali"
+          />
+          <PlacePicker
+            label="End"
+            value={state.destination}
+            onPick={setDestination}
+            placeholder="e.g. Rohtang Pass"
+          />
         </div>
 
         <div className="composer-placeholder" data-testid="composer-gpx-import">

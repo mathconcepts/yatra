@@ -857,3 +857,63 @@ body {
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+/* Place picker (Slice B) */
+.composer-route-pickers {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.place-picker { position: relative; }
+
+.place-picker-loading {
+  position: absolute;
+  right: 12px;
+  top: 36px;
+  font-size: 11px;
+  color: rgba(42, 31, 18, 0.5);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.place-picker-results {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  z-index: 5;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: #fff;
+  border: 1px solid rgba(42, 31, 18, 0.2);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.place-picker-item {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 10px 14px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-family: inherit;
+  font-size: 14px;
+  color: inherit;
+}
+.place-picker-item:hover { background: rgba(138, 69, 40, 0.08); }
+.place-picker-name { flex: 1; }
+.place-picker-kind {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(42, 31, 18, 0.5);
+}
