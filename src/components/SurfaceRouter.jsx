@@ -103,7 +103,10 @@ export default function SurfaceRouter({ atlas, locationId, locations }) {
   if (surface === "composer") {
     return (
       <Suspense fallback={<div className="jm-loading" role="status">Loading…</div>}>
-        <Composer onCancel={() => switchSurface("atlas")} onPreview={() => switchSurface("reels")} />
+        <Composer
+          onCancel={() => switchSurface("atlas")}
+          onPreview={(cfg) => { setMemoryOverride(cfg); switchSurface("reels"); }}
+        />
       </Suspense>
     );
   }
