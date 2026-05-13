@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.6] - 2026-05-13 — AI Cinematographer Step 6: directorTTS (silent / tone / live providers)
+
+The TTS service layer per the design doc — produces one `Float32Array` of narration audio
+per scene, ready for `directorAudio.mixDirectorAudio` to assemble into the master narration
+channel. Three providers; default is `silent` when `VITE_DIRECTOR_MOCK=1`.
+
+### Added
+- **`src/services/directorTTS.js`** with:
+  - `synthesizeSilence(durationS, sampleRate)` — exact-length zero channel.
+  - `synthesizeTone(durationS, sampleRate, {freq, amp})` — 220 Hz sine with 30ms cosine fades for audible pipeline checks without paying for TTS.
+  - `buildTtsRequest({scene, palette, language})` — pure /v1/tts request assembler; rejects unknown languages or missing voice ids.
+  - `alignToSceneDuration(samples, durationS, sampleRate)` — pad or truncate audio to fit the scene slot exactly so master-timeline math stays clean even when providers return imprecise lengths.
+  - `synthesizeSceneLive(scene, {workerBase, fetchImpl, decodeAudio, ...})` — POST to Worker `/v1/tts`, decode bytes via injected `decodeAudio` (production wraps `AudioContext.decodeAudioData`), align to scene duration.
+  - `synthesizeScenes({scenes, palette, language, sampleRate, mode, workerBase, fetchImpl, decodeAudio})` — orchestrator. Mode auto-detects (`silent` when `VITE_DIRECTOR_MOCK=1`, else `live`). Returns `{tracks, mode}` — `tracks` is `Float32Array[]` aligned to scene order, drop-in for `mixDirectorAudio({sceneTracks, sceneStartsS})`.
+  - `sceneStarts(scenes)` — convenience for the mixer's `sceneStartsS` arg.
+
+### Why silent is the default
+The autoplan CEO review said Indic TTS quality is the entire moat and must be validated with a $5 ElevenLabs sample before more code is worth writing. Until that validation happens, the pipeline ships silent — honest about what it is. `tone` mode is the audible cousin for timing sanity checks without paying for TTS.
+
+### Tests
+- 24 new tests covering: silence/tone math (length, fade endpoints, amplitude scaling), peak detection that avoids periodic-signal zero-crossings, request assembly (4 languages + rejection), scene-duration alignment (longer/shorter/null inputs), live provider (correct POST body, scene-duration padding, worker-error propagation, missing-dep rejection), orchestrator routing across silent/tone/live, missing workerBase failure, input validation. Total: 470/470.
+
+### Not yet
+- `synthesizeScenes` is not yet called by `DirectorView`. One glue commit (script → TTS → mixer → composeFrame → mp4Export → exportPostcard cover) wires the full pipeline.
+
 ## [1.6.5] - 2026-05-13 — AI Cinematographer Step 5: exportPostcard (the WhatsApp preview artifact)
 
 The most-shareable artifact per byte. Stills survive WhatsApp compression where MP4s get
