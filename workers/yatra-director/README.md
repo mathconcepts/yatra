@@ -30,6 +30,59 @@ v1.6.9 wires real upstream APIs:
 
 Auto-decided security controls (Turnstile, rate-limit, kill switch, R2 idempotency cache) still exist as TODO markers in `src/index.js`. See `SECURITY.md` for the deploy gate.
 
+## Provisioning Google TTS (free tier covers a side project)
+
+Google Cloud Text-to-Speech ships 1M characters/month free per voice
+family (Standard, Wavenet, Neural2). A typical Director reel is ~600
+characters per language, so a multilingual render burns ~2400 chars.
+You can ship ~400 multilingual reels a month on the free tier.
+
+1. Open https://console.cloud.google.com/ and create (or reuse) a project.
+   Note the project id.
+2. Enable the Cloud Text-to-Speech API for that project:
+   https://console.cloud.google.com/apis/library/texttospeech.googleapis.com
+3. Set up a billing account on the project (required even for free-tier
+   usage — Google needs a card on file, but doesn't charge below 1M chars/mo).
+   Add an email alert at $5/mo as a safety net.
+4. Create an API key restricted to this single API:
+   - APIs & Services → Credentials → Create credentials → API key
+   - On the new key, click "Edit API key"
+   - Under "API restrictions" pick **Restrict key** → select only
+     **Cloud Text-to-Speech API**
+   - Save. Copy the key.
+5. Provision the key as a Worker secret:
+   ```bash
+   cd workers/yatra-director
+   wrangler secret put GOOGLE_TTS_API_KEY
+   # Paste the key when prompted.
+   ```
+6. Restart your local dev server (`npm run dev` in this directory).
+   The `/v1/tts` route now talks to Google. Without the key it returns
+   `503 tts-not-configured` — that's expected, not a bug.
+
+Front-end wiring (in repo root):
+
+```bash
+# .env.local (repo root, NOT in workers/)
+VITE_DIRECTOR_WORKER_URL=http://localhost:8787
+VITE_DIRECTOR_MOCK=0
+```
+
+With `VITE_DIRECTOR_MOCK=0` the client hits the Worker for both /v1/script
+and /v1/tts. With `=1` it bypasses the Worker entirely (canned fixture
++ silent audio) — the fast-feedback dev mode that requires no keys.
+
+### Rotation
+
+```bash
+# In the GCP console, create a new key (don't revoke the old one yet).
+cd workers/yatra-director
+wrangler secret put GOOGLE_TTS_API_KEY  # paste new key
+wrangler deploy
+wrangler tail  # watch for 5 min to confirm 200s
+# Then revoke the OLD key in GCP.
+```
+
 ## Pipeline (where this fits)
 
 ```

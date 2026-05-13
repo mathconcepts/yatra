@@ -75,6 +75,7 @@ export async function runDirectorPipeline({
   palette,
   language,
   personalContext = "",
+  basemap, // "topo" | "imagery" | "relief"; undefined → config default
   fps = DEFAULT_FPS,
   width = DEFAULT_WIDTH,
   height = DEFAULT_HEIGHT,
@@ -144,6 +145,7 @@ export async function runDirectorPipeline({
   const renderer = await makeRenderer(config, {
     width,
     height,
+    basemap,
     directorMode: {
       scenes,
       palette,
