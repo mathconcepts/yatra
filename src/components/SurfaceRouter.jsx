@@ -1,5 +1,6 @@
 import { useState, useEffect, lazy, Suspense } from "react";
 import { readMemoryFromUrl } from "../services/shareLink";
+import AtlasExportMenu from "./AtlasExportMenu";
 
 // Reels is lazy so the desktop bundle does not pull in reels code.
 // See ~/.gstack/projects/mathconcepts-yatra/root-main-v3-0-plan-20260512-144026.md
@@ -58,7 +59,7 @@ function readSize() {
  * surfaces without a refresh. The user's choice survives via URL +
  * localStorage.
  */
-export default function SurfaceRouter({ atlas, locationId, locations }) {
+export default function SurfaceRouter({ atlas, locationId, locations, atlasConfig, atlasMapRef }) {
   const [size, setSize] = useState(readSize);
   const [override, setOverride] = useState(() => readURLOverride() || readStoredOverride());
   // A shared / saved memory routed in via ?memory=... or opened from the
@@ -185,6 +186,9 @@ export default function SurfaceRouter({ atlas, locationId, locations }) {
         >
           Reels mode
         </button>
+        {atlasConfig && atlasMapRef && (
+          <AtlasExportMenu mapRef={atlasMapRef} config={atlasConfig} />
+        )}
       </div>
     </>
   );

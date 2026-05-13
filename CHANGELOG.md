@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.2] - 2026-05-13 — QA pass on v1.5.1
+
+User-reported issues from the second QA round.
+
+### Fixed
+- **Export menu overlapped the surface toggle stack.** Lifted `mapRef` into `App` so `SurfaceRouter` can render `AtlasExportMenu` inside the `.jm-surface-toggles` column. Removed the floating sibling rendering from `JourneyMap`. Export now sits as a clean 5th item in the column.
+- **Compare view didn't include Srivari Mettu.** The dropdown listed each curated location once even when it had multiple routes. Now each route in a multi-route config gets its own dropdown option (e.g. "Tirupati → Tirumala · Alipiri Mettu" and "… · Srivari Mettu") via a per-route config projection.
+- **PNG snapshot had no geographical context.** `exportPng` now accepts a `config` argument and composites an editorial caption strip: 80px dark header with title + subtitle, the rendered map below, and a 64px footer with route name, distance, duration, and total climb in meters. `AtlasExportMenu` passes the active config through.
+- **Compare view had no split-screen mode.** Added an Overlay / Split toggle in the compare header. Split mode renders two stacked map panels, each with its own route + marker, sharing the progress slider. Panels are color-edged (saffron / sky) to reinforce which is A vs B.
+
+### Other
+- Cleaned up the duplicate `useMemo`-imported `summarizeJourney` reference in `CompareView.jsx`.
+
 ## [1.5.1] - 2026-05-13 — QA pass on v1.5.0
 
 User-reported issues from the Atlas compare + universal export ship.

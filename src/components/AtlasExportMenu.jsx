@@ -26,7 +26,7 @@ export default function AtlasExportMenu({ mapRef, config }) {
     if (!canvas) { setStatus({ kind: "error", message: "Map not ready" }); return; }
     try {
       setStatus({ kind: "working", note: "Snapshot…" });
-      const url = await exportPng(canvas);
+      const url = await exportPng(canvas, { config });
       setDownloadUrl(url);
       setDownloadName(`${slug(config?.title || "yatra")}.png`);
       setStatus({ kind: "done" });
