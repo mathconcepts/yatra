@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.8] - 2026-05-13 — AI Cinematographer Step 8: MP4 embeds the mixer's audio directly
+
+The audio gap from v1.6.7 closed. `encodeMp4` now accepts an `audioBuffer` option alongside
+the legacy `audioBlob`. The Director pipeline already has an `AudioBuffer` in hand (from
+the OfflineAudioContext-backed mixer), so it passes it through without the Blob → decode
+round-trip. When the mixer runs in `silent` mode the embedded track is silent samples;
+when it runs in `tone` or `live` the audience hears what the mixer produced.
+
+### Added
+- **`resolveAudioPlan({audioBuffer, audioBlob, decodeBlob})`** — pure-ish helper in `src/services/mp4Export.js`. Prefers `audioBuffer` when present (no decode); falls back to decoding `audioBlob` via the injected `decodeBlob`. Returns `null` cleanly when neither source resolves. Defaults channel count to 1 when buffer omits it.
+
+### Changed
+- **`encodeMp4`** — new `audioBuffer` option, routed through `resolveAudioPlan`. Existing `audioBlob` callers (Composer narration upload) keep working — the legacy path now goes through the same resolver.
+- **`directorPipeline`** — passes the mixer's `audioBuffer` directly into `encodeMp4`. The `audioBlob: null` from v1.6.7 is gone.
+- **`DirectorView`** — result note now reflects audio status accurately: shows the resolved mode ("silent" / "tone" / "live") and whether the buffer was embedded.
+
+### Tests
+- 6 new tests on `resolveAudioPlan`: buffer-wins-over-blob (no decoder called), blob-decode path, both-missing returns null, decoder returns falsy, malformed buffer rejection, channel-count default. Plus 2 new pipeline tests asserting the mixer's `audioBuffer` is forwarded to `encodeMp4` and that the `audioBuffer: null` path is preserved when no `createAudioBuffer` was wired. Total: 492/492.
+
+### What's left
+- Real TTS (Worker `/v1/tts` route + ElevenLabs key) — code is wired in `directorTTS.synthesizeSceneLive`, just needs the Worker route implemented + key provisioned.
+- Worker hardening per `SECURITY.md`.
+- TTS quality validation ($5, 10 minutes, your job — and the moat).
+
 ## [1.6.7] - 2026-05-13 — AI Cinematographer Step 7: end-to-end pipeline (DirectorView ships a real MP4)
 
 The glue commit. DirectorView's "Direct this journey" button now runs the full chain:

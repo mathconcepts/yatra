@@ -36,6 +36,31 @@ export function isExportSupported(globalScope = typeof globalThis !== "undefined
 }
 
 /**
+ * Pure-ish: decide which audio source to use. `audioBuffer` (AudioBuffer
+ * shape with `.numberOfChannels`, `.sampleRate`) wins when present; we
+ * skip the decode and embed it directly. Otherwise fall back to the
+ * legacy `audioBlob` path which decodes via `decodeBlob`.
+ *
+ * `decodeBlob` is injected so this helper is unit-testable. Returns
+ * null when there's no audio to embed.
+ */
+export async function resolveAudioPlan({ audioBuffer = null, audioBlob = null, decodeBlob = null } = {}) {
+  if (audioBuffer && typeof audioBuffer === "object" && Number.isFinite(audioBuffer.sampleRate)) {
+    const channels = Number.isFinite(audioBuffer.numberOfChannels)
+      ? audioBuffer.numberOfChannels
+      : 1;
+    return { buffer: audioBuffer, channels, sampleRate: audioBuffer.sampleRate };
+  }
+  if (audioBlob && typeof decodeBlob === "function") {
+    const buf = await decodeBlob(audioBlob);
+    if (buf && Number.isFinite(buf.sampleRate)) {
+      return { buffer: buf, channels: buf.numberOfChannels || 1, sampleRate: buf.sampleRate };
+    }
+  }
+  return null;
+}
+
+/**
  * Pure: compute the frame plan — { totalFrames, frameIntervalMs }.
  * Exported for unit tests.
  */
@@ -66,6 +91,7 @@ export async function encodeMp4(frames, {
   height = DEFAULT_HEIGHT,
   bitrate = DEFAULT_BITRATE,
   audioBlob = null,
+  audioBuffer = null,
   onProgress = null,
 } = {}) {
   const det = isExportSupported(typeof globalThis !== "undefined" ? globalThis : {});
@@ -84,16 +110,18 @@ export async function encodeMp4(frames, {
   }
   const { Muxer, ArrayBufferTarget } = MuxerModule;
 
-  // Slice I: try to decode + prepare audio metadata BEFORE building the
-  // muxer so its audio track config is right.
-  let audioPlan = null;
-  if (audioBlob) {
-    const { decodeAudioBlob } = await import("./audioEncode.js");
-    const buf = await decodeAudioBlob(audioBlob);
-    if (buf) {
-      audioPlan = { buffer: buf, channels: buf.numberOfChannels, sampleRate: buf.sampleRate };
-    }
-  }
+  // Resolve the audio source. v1.6.8 added the audioBuffer path so the
+  // Director pipeline (which mixes audio via OfflineAudioContext and
+  // already has an AudioBuffer in hand) doesn't have to round-trip
+  // through Blob → decode. Legacy audioBlob callers (Composer narration
+  // upload) still work via the decodeBlob path.
+  const audioPlan = await resolveAudioPlan({
+    audioBuffer,
+    audioBlob,
+    decodeBlob: audioBlob
+      ? (await import("./audioEncode.js")).decodeAudioBlob
+      : null,
+  });
 
   const target = new ArrayBufferTarget();
   const muxer = new Muxer({

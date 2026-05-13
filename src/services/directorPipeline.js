@@ -163,7 +163,9 @@ export async function runDirectorPipeline({
     // Don't destroy yet — the postcard step uses the canvas via the first frame.
   }
 
-  // 5. Encode MP4 (silent at v1.6.7)
+  // 5. Encode MP4. When audioBuffer is in hand (from the mixer above),
+  // pass it through directly. encodeMp4 uses it without the
+  // Blob→decode round-trip.
   if (typeof encodeMp4Impl !== "function") {
     renderer.destroy?.();
     frames.forEach((f) => f.close?.());
@@ -174,7 +176,7 @@ export async function runDirectorPipeline({
     fps,
     width,
     height,
-    audioBlob: null,
+    audioBuffer,
     onProgress: (n, t) => emit("encode", { frame: n, total: t }),
   });
 

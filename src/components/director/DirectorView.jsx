@@ -5,14 +5,15 @@ import { runDirectorPipeline } from "../../services/directorPipeline.js";
 /**
  * AI Cinematographer surface.
  *
- * Pipeline wired in v1.6.7: tone + route + language → directorPipeline →
- * MP4 (silent for now) + postcard. The "Direct this journey" button runs
- * the full script → TTS (silent default) → mix → render → encode →
- * postcard chain and surfaces download links.
+ * Pipeline wired in v1.6.7, audio embedded in v1.6.8: tone + route +
+ * language → directorPipeline → MP4 (with embedded audio when an
+ * OfflineAudioContext is available) + postcard PNG.
  *
- * Audio in the MP4 is deferred to v1.6.8 (small encodeMp4 surface
- * change to accept AudioBuffer directly). Today: silent video + cover
- * postcard ready to share.
+ * The "Direct this journey" button runs the full chain end-to-end:
+ *   script → TTS (silent / tone / live) → mix → render → encode →
+ *   postcard. Audio quality follows the TTS mode: VITE_DIRECTOR_MOCK=1
+ *   ships silent frames; live mode through the Worker brings real
+ *   narration once /v1/tts and ELEVENLABS_API_KEY are provisioned.
  */
 
 function defaultLanguage() {
@@ -191,7 +192,9 @@ export default function DirectorView({ locations = {}, onCancel }) {
             </a>
           </div>
           <p className="director-note">
-            v1.6.7 ships silent MP4 + postcard cover. Audio mixer ran in <code>{result.mode}</code> mode; embedding into MP4 lands in v1.6.8 after TTS quality validation.
+            Audio mixer ran in <code>{result.mode}</code> mode. {result.audioBuffer
+              ? "Embedded into the MP4."
+              : "MP4 is silent (OfflineAudioContext unavailable in this environment)."}
           </p>
           <details className="director-scenes-toggle">
             <summary>Scenes ({result.scenes.length})</summary>

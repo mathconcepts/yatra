@@ -111,6 +111,27 @@ describe("runDirectorPipeline", () => {
     expect(out.frameCount).toBe(180); // 30s × 6 fps
   });
 
+  it("forwards the mixed audioBuffer into encodeMp4", async () => {
+    const d = makeDeps();
+    await runDirectorPipeline({ config, palette: devotional, language: "te", fps: 1, ...d });
+    const encodeArgs = d.encodeMp4Impl.mock.calls[0][1];
+    expect(encodeArgs.audioBuffer).toBeTruthy();
+    expect(encodeArgs.audioBuffer.sampleRate).toBe(48000);
+    expect(encodeArgs.audioBuffer.numberOfChannels).toBe(1);
+  });
+
+  it("forwards audioBuffer = undefined when no createAudioBuffer wired", async () => {
+    const d = makeDeps();
+    await runDirectorPipeline({
+      config, palette: devotional, language: "te", fps: 1,
+      generate: d.generate, synthesize: d.synthesize, mix: d.mix,
+      makeRenderer: d.makeRenderer, encodeMp4Impl: d.encodeMp4Impl,
+      postcard: d.postcard, onProgress: d.onProgress,
+    });
+    const encodeArgs = d.encodeMp4Impl.mock.calls[0][1];
+    expect(encodeArgs.audioBuffer).toBeNull();
+  });
+
   it("passes directorMode into the renderer", async () => {
     const d = makeDeps();
     await runDirectorPipeline({ config, palette: devotional, language: "te", fps: 1, ...d });
