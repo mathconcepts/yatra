@@ -18,6 +18,35 @@
  */
 
 const DEFAULT_FPS = 30;
+
+/**
+ * Pick an AVC codec string whose Level supports the given resolution and
+ * framerate. The macroblock budget is the binding constraint:
+ *   macroblocks/frame = ceil(w/16) * ceil(h/16)
+ *   macroblocks/sec   = macroblocks/frame * fps
+ * Level 3.0 caps at 40,500 mb/s (was the prior hard-coded value and is
+ * why 720x1280@30 ~ 108,000 mb/s blew up). Level 4.0 covers up to
+ * 1920x1080@30 and is universally decodable on iOS/Android/desktop.
+ *
+ * Exported for tests; preferred outside callers stay on `encodeMp4`.
+ */
+export function pickAvcLevelHex(width, height, fps) {
+  const mbPerFrame = Math.ceil(width / 16) * Math.ceil(height / 16);
+  const mbPerSec = mbPerFrame * fps;
+  // Thresholds from ITU-T H.264 Table A-1 (MaxMBPS, MaxFS).
+  // We only enumerate Baseline-compatible levels we'd realistically ship.
+  if (mbPerSec <= 40500 && mbPerFrame <= 1620) return "1E";   // 3.0
+  if (mbPerSec <= 108000 && mbPerFrame <= 3600) return "1F";  // 3.1
+  if (mbPerSec <= 216000 && mbPerFrame <= 5120) return "20";  // 3.2
+  if (mbPerSec <= 245760 && mbPerFrame <= 8192) return "28";  // 4.0
+  if (mbPerSec <= 522240 && mbPerFrame <= 8704) return "29";  // 4.1
+  return "2A"; // 4.2 — covers 1920x1080@60. Above that we'd need 5.x.
+}
+
+export function pickAvcCodec(width, height, fps) {
+  // Baseline profile (42), constraint flags E0, dynamic level.
+  return `avc1.42E0${pickAvcLevelHex(width, height, fps)}`;
+}
 const DEFAULT_BITRATE = 5_000_000;
 const DEFAULT_WIDTH = 720;
 const DEFAULT_HEIGHT = 1280;
@@ -144,7 +173,7 @@ export async function encodeMp4(frames, {
     error: (e) => { encoderError = e; },
   });
   videoEncoder.configure({
-    codec: "avc1.42E01E",
+    codec: pickAvcCodec(width, height, fps),
     width, height,
     bitrate,
     framerate: fps,
