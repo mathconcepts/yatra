@@ -66,13 +66,17 @@ Generate a directed scene list for a route + tone + language.
   ],
   "distanceKm": 4.2,
   "elevationGainM": 160,
-  "waypointCount": 142
+  "waypointCount": 142,
+  "personalContext": "A return to the hill my grandmother walked."
 }
 ```
 
 `tone` MUST be one of: `devotional | explorer | poetic | historical`.
 `language` MUST be one of: `en | hi | te | ta`.
 `peakMoments` must contain 1–8 entries with `t ∈ [0, 1]`.
+`personalContext` is optional. ≤ 500 chars. The model weaves the note into
+the narration as the pilgrim's lived experience and is instructed to never
+extrapolate beyond what the note states. Empty / absent → unpersonalized.
 
 ### Response 200
 

@@ -79,6 +79,29 @@ describe("buildUserPrompt", () => {
     const p = buildUserPrompt({ ...body, elevationGainM: 159.7 });
     expect(p).toContain("Elevation gain: 160 m");
   });
+
+  it("weaves personalContext into the prompt when present", () => {
+    const note = "A return to the hill my grandmother walked.";
+    const p = buildUserPrompt({ ...body, personalContext: note });
+    expect(p).toContain("Pilgrim's note");
+    expect(p).toContain(note);
+    expect(p).toContain("do NOT invent facts beyond what is stated here");
+  });
+
+  it("omits the personal-note block when personalContext is empty or absent", () => {
+    expect(buildUserPrompt(body)).not.toContain("Pilgrim's note");
+    expect(buildUserPrompt({ ...body, personalContext: "" })).not.toContain("Pilgrim's note");
+    expect(buildUserPrompt({ ...body, personalContext: "   " })).not.toContain("Pilgrim's note");
+  });
+
+  it("truncates a long personalContext at 500 chars", () => {
+    const long = "x".repeat(600);
+    const p = buildUserPrompt({ ...body, personalContext: long });
+    // Block exists with truncated content (500 x's, not 600)
+    expect(p).toContain("Pilgrim's note");
+    expect(p).toContain("x".repeat(500));
+    expect(p).not.toContain("x".repeat(501));
+  });
 });
 
 describe("parseClaudeResponse", () => {

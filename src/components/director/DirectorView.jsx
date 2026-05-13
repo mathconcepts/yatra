@@ -1,6 +1,20 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { PALETTE_IDS, getPalette, SUPPORTED_LANGUAGES } from "../../services/tonePalettes/index.js";
 import { runDirectorPipeline } from "../../services/directorPipeline.js";
+import { suggestPersonalNote } from "../../services/directorScript.js";
+
+const PERSONAL_NOTE_STORAGE_PREFIX = "yatra.director.personalNote";
+
+function readStoredNote(routeId) {
+  if (typeof window === "undefined" || !routeId) return "";
+  try { return window.localStorage.getItem(`${PERSONAL_NOTE_STORAGE_PREFIX}.${routeId}`) || ""; }
+  catch { return ""; }
+}
+function writeStoredNote(routeId, value) {
+  if (typeof window === "undefined" || !routeId) return;
+  try { window.localStorage.setItem(`${PERSONAL_NOTE_STORAGE_PREFIX}.${routeId}`, value); }
+  catch { /* private mode / quota — ignore */ }
+}
 
 /**
  * AI Cinematographer surface.
@@ -30,6 +44,7 @@ export default function DirectorView({ locations = {}, onCancel }) {
   const [tone, setTone] = useState("devotional");
   const [language, setLanguage] = useState(defaultLanguage);
   const [routeId, setRouteId] = useState(routeChoices[0]?.id || "");
+  const [personalNote, setPersonalNote] = useState(() => readStoredNote(routeChoices[0]?.id || ""));
   const [stage, setStage] = useState("idle"); // idle | running | done | error
   const [progressMsg, setProgressMsg] = useState("");
   const [progressDetail, setProgressDetail] = useState("");
@@ -39,6 +54,17 @@ export default function DirectorView({ locations = {}, onCancel }) {
 
   const palette = getPalette(tone);
   const route = routeChoices.find((r) => r.id === routeId)?.cfg;
+
+  // When the user changes route, re-load that route's saved note.
+  useEffect(() => { setPersonalNote(readStoredNote(routeId)); }, [routeId]);
+
+  // Persist on every change (cheap; localStorage writes are sync but small).
+  useEffect(() => { writeStoredNote(routeId, personalNote); }, [routeId, personalNote]);
+
+  function onSuggest() {
+    if (!route) return;
+    setPersonalNote(suggestPersonalNote({ config: route, tone }));
+  }
 
   const STAGE_LABELS = {
     script: "Composing the script",
@@ -81,6 +107,7 @@ export default function DirectorView({ locations = {}, onCancel }) {
         config: route,
         palette,
         language,
+        personalContext: personalNote,
         signal: abortRef.current.signal,
         makeRenderer: createOffscreenReelRenderer,
         encodeMp4Impl: encodeMp4,
@@ -163,6 +190,39 @@ export default function DirectorView({ locations = {}, onCancel }) {
             </button>
           ))}
         </div>
+      </section>
+
+      <section className="director-row" aria-label="Personal note">
+        <label className="composer-label" htmlFor="director-personal-note">
+          Tell us about this journey <span style={{ opacity: 0.6 }}>(optional)</span>
+        </label>
+        <textarea
+          id="director-personal-note"
+          className="director-personal-note"
+          rows={3}
+          maxLength={500}
+          placeholder="A relative who walked it. A first trip. What this journey means to you."
+          value={personalNote}
+          onChange={(e) => setPersonalNote(e.target.value)}
+          style={{
+            width: "100%", padding: "0.5rem 0.75rem", borderRadius: 6,
+            background: "rgba(255,255,255,0.04)",
+            border: "1px solid rgba(255,255,255,0.1)",
+            color: "inherit", fontFamily: "inherit", fontSize: "0.95rem",
+            resize: "vertical",
+          }}
+        />
+        <button
+          type="button"
+          onClick={onSuggest}
+          style={{
+            marginTop: "0.4rem", padding: "0.3rem 0.7rem",
+            background: "transparent", border: "1px solid rgba(255,255,255,0.2)",
+            borderRadius: 4, color: "inherit", cursor: "pointer", fontSize: "0.85rem",
+          }}
+        >
+          ✨ AI suggest
+        </button>
       </section>
 
       <button

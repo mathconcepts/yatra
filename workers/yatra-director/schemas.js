@@ -43,6 +43,10 @@ export function validateScriptRequest(body) {
     errs.push("elevationGainM: number or null");
   }
   if (typeof body.waypointCount !== "number") errs.push("waypointCount: number");
+  if (body.personalContext !== undefined && body.personalContext !== null) {
+    if (typeof body.personalContext !== "string") errs.push("personalContext: string if present");
+    else if (body.personalContext.length > 500) errs.push("personalContext: <= 500 chars");
+  }
   return errs;
 }
 

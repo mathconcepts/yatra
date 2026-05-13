@@ -74,6 +74,7 @@ export async function runDirectorPipeline({
   config,
   palette,
   language,
+  personalContext = "",
   fps = DEFAULT_FPS,
   width = DEFAULT_WIDTH,
   height = DEFAULT_HEIGHT,
@@ -100,7 +101,7 @@ export async function runDirectorPipeline({
 
   // 1. Script
   emit("script", { message: "Composing the narration" });
-  const script = await generate({ config, tone: palette.id, language, signal });
+  const script = await generate({ config, tone: palette.id, language, personalContext, signal });
   const scenes = script?.scenes || [];
   if (scenes.length === 0) throw new Error("Director: script produced no scenes");
   const { totalDurationS } = scenesToAudioTiming(scenes);

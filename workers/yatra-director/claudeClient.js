@@ -56,6 +56,11 @@ export function buildUserPrompt(body, { totalDurationS = 30 } = {}) {
     }
     lines.push("");
   }
+  if (typeof body.personalContext === "string" && body.personalContext.trim().length > 0) {
+    lines.push("Pilgrim's note (weave this into the narration as their lived experience; do NOT invent facts beyond what is stated here):");
+    lines.push(`"""${body.personalContext.trim().slice(0, 500)}"""`);
+    lines.push("");
+  }
   lines.push("Produce the JSON described in the system prompt. Cover [0, " + totalDurationS + "] seconds end-to-end. One scene per peak moment unless adjacent peaks are within 2s of each other (merge those).");
   return lines.join("\n");
 }

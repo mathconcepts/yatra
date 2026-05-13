@@ -41,7 +41,7 @@ function getWorkerBase() {
  * Build the request payload from a Yatra location config. Reuses
  * detectPeakMoments so scenes ARE peak moments (no re-derivation).
  */
-export function buildScriptRequest({ config, tone, language }) {
+export function buildScriptRequest({ config, tone, language, personalContext = "" }) {
   const peaks = detectPeakMoments(config);
   const route = config.routes?.[0];
   const waypoints = route?.waypoints || [];
@@ -67,14 +67,32 @@ export function buildScriptRequest({ config, tone, language }) {
     distanceKm,
     elevationGainM,
     waypointCount: waypoints.length,
+    personalContext: typeof personalContext === "string" ? personalContext.trim().slice(0, 500) : "",
   };
+}
+
+/**
+ * Build an "AI-suggested default" personal note for a given route + tone.
+ * Pure (no LLM call) so it's instant and free. The real LLM personalization
+ * happens later, when the worker weaves this note into the narration.
+ * The user is free to edit or replace the suggestion before directing.
+ */
+export function suggestPersonalNote({ config, tone }) {
+  const title = config?.title || "this journey";
+  const templates = {
+    devotional: `A quiet return to ${title}. In the footsteps of those who walked before.`,
+    explorer: `Tracing the trail to ${title}. Step by step, the path reveals itself.`,
+    poetic: `${title}, held in the slow weather of memory.`,
+    historical: `${title}. A path walked across generations.`,
+  };
+  return templates[tone] || templates.devotional;
 }
 
 /**
  * Fetch a directed script. Returns { scenes, meta }. Throws on transport
  * or schema failure; caller decides whether to retry only-this-stage.
  */
-export async function generateScript({ config, tone, language, signal } = {}) {
+export async function generateScript({ config, tone, language, personalContext = "", signal } = {}) {
   if (!config || !tone || !language) {
     throw new Error("generateScript requires {config, tone, language}");
   }
@@ -114,7 +132,7 @@ export async function generateScript({ config, tone, language, signal } = {}) {
       "VITE_DIRECTOR_WORKER_URL is not set. Set it in .env.local or run with VITE_DIRECTOR_MOCK=1 for the canned fixture path.",
     );
   }
-  const body = buildScriptRequest({ config, tone, language });
+  const body = buildScriptRequest({ config, tone, language, personalContext });
   const res = await fetch(`${base.replace(/\/$/, "")}/v1/script`, {
     method: "POST",
     headers: { "content-type": "application/json" },
