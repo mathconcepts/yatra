@@ -13,6 +13,7 @@
  */
 import { validateScriptRequest, problem } from "../schemas.js";
 import { callClaude } from "../claudeClient.js";
+import { callGoogleTTS, LANGUAGE_TO_LOCALE } from "../googleTtsClient.js";
 import { SYSTEM_PROMPTS } from "./prompts.js";
 
 const TOTAL_DURATION_S = 30;
@@ -167,6 +168,125 @@ async function handleScript(request, env, origin) {
   }
 }
 
+/**
+ * /v1/tts — synthesize one scene's narration audio.
+ *
+ * Backend: Google Cloud Text-to-Speech (free tier 1M chars/month per
+ * voice family). Returns MP3 bytes; the client decodes via
+ * AudioContext.decodeAudioData into a Float32Array aligned to the scene
+ * slot by directorTTS.alignToSceneDuration.
+ *
+ * Request shape (see API.md):
+ *   { tone, language, voiceId, text, tempo }
+ *
+ * Response: audio/mpeg bytes (Content-Type: audio/mpeg), so the client
+ * can pipe straight into decodeAudioData without unwrapping JSON.
+ */
+async function handleTts(request, env, origin) {
+  const id = reqId();
+
+  // TODO(security/auth): verify X-Yatra-Turnstile.
+  // TODO(security/rate-limit): per-IP Durable Object counters.
+  // TODO(security/killswitch): env.DIRECTOR_KILLSWITCH || daily budget exhausted.
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return jsonResponse(
+      400,
+      problem({
+        slug: "invalid-request",
+        title: "Malformed JSON",
+        status: 400,
+        detail: "Request body is not valid JSON.",
+        fix: "Send {tone, language, voiceId, text, tempo} per API.md.",
+        requestId: id,
+      }),
+      origin,
+    );
+  }
+  const { tone, language, voiceId, text, tempo } = body || {};
+  if (!tone || !language || !voiceId || !text) {
+    return jsonResponse(
+      400,
+      problem({
+        slug: "invalid-request",
+        title: "Missing required field",
+        status: 400,
+        detail: "tone, language, voiceId, text are all required.",
+        fix: "See API.md /v1/tts for the schema.",
+        requestId: id,
+      }),
+      origin,
+    );
+  }
+  if (!LANGUAGE_TO_LOCALE[language]) {
+    return jsonResponse(
+      400,
+      problem({
+        slug: "invalid-request",
+        title: "Unsupported language",
+        status: 400,
+        detail: `language must be one of: ${Object.keys(LANGUAGE_TO_LOCALE).join(", ")}.`,
+        fix: "Pick a supported language code.",
+        requestId: id,
+      }),
+      origin,
+    );
+  }
+
+  if (!env?.GOOGLE_TTS_API_KEY) {
+    return jsonResponse(
+      503,
+      problem({
+        slug: "tts-not-configured",
+        title: "Google TTS API key not set",
+        status: 503,
+        detail: "GOOGLE_TTS_API_KEY has not been provisioned on the Worker.",
+        fix: "wrangler secret put GOOGLE_TTS_API_KEY (free tier: enable Cloud Text-to-Speech API on a GCP project, create an API key restricted to that API).",
+        requestId: id,
+      }),
+      origin,
+    );
+  }
+
+  try {
+    const audio = await callGoogleTTS({
+      apiKey: env.GOOGLE_TTS_API_KEY,
+      text,
+      voiceId,
+      language,
+      tempo,
+    });
+    return new Response(audio, {
+      status: 200,
+      headers: {
+        "Content-Type": "audio/mpeg",
+        "X-Yatra-Provider": "google-tts",
+        ...corsHeaders(origin),
+      },
+    });
+  } catch (err) {
+    const code = err?.code || "parse";
+    const statusByCode = { auth: 502, timeout: 504, rate: 503, parse: 502 };
+    const status = statusByCode[code] || 502;
+    return jsonResponse(
+      status,
+      problem({
+        slug: "upstream-tts",
+        title: "Upstream Google TTS error",
+        status,
+        detail: err?.message || String(err),
+        cause: `googleTtsClient code=${code}`,
+        fix: "Check Worker logs. If 401/403, rotate GOOGLE_TTS_API_KEY and verify Text-to-Speech API is enabled on the project.",
+        requestId: id,
+      }),
+      origin,
+    );
+  }
+}
+
 export default {
   async fetch(request, env, _ctx) {
     const url = new URL(request.url);
@@ -193,6 +313,9 @@ export default {
 
     if (request.method === "POST" && url.pathname === "/v1/script") {
       return handleScript(request, env, origin);
+    }
+    if (request.method === "POST" && url.pathname === "/v1/tts") {
+      return handleTts(request, env, origin);
     }
     if (request.method === "GET" && url.pathname === "/healthz") {
       return new Response("ok", { status: 200, headers: corsHeaders(origin) });

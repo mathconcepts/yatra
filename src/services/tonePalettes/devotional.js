@@ -27,15 +27,20 @@ const devotional = {
     "know without an English gloss the first time. Produce one line per " +
     "scene; each line is the narration text only, no stage directions.",
   voice: {
-    provider: "elevenlabs",
-    // Placeholder ids — replace with real voice ids before first live render.
+    provider: "google-tts",
+    // Google Cloud TTS voice names. Free tier covers ~1M chars/month per
+    // voice family — effectively unmetered for a side project. Devotional
+    // tone leans on Wavenet voices for warmth where available; Indic
+    // voices use the highest-tier neural option Google publishes for
+    // each locale. en-IN gives Indian-English accent (Wavenet-A is a
+    // calm female voice that suits devotional narration).
     voiceIdByLang: {
-      en: "REPLACE_EN_DEVOTIONAL",
-      hi: "REPLACE_HI_DEVOTIONAL",
-      te: "REPLACE_TE_DEVOTIONAL",
-      ta: "REPLACE_TA_DEVOTIONAL",
+      en: "en-IN-Wavenet-A",
+      hi: "hi-IN-Wavenet-A",
+      te: "te-IN-Standard-A",
+      ta: "ta-IN-Wavenet-A",
     },
-    tempo: 0.92, // slightly slower than neutral
+    tempo: 0.92, // slightly slower than neutral (maps to Google speakingRate)
     style: "calm",
   },
   music: {

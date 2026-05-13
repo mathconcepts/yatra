@@ -26,7 +26,6 @@ compatibility_date = "2026-05-13"
 # DIRECTOR_KILLSWITCH = "0"
 
 # Secrets (set via `wrangler secret put <NAME>`, never put in this file):
-#   ANTHROPIC_API_KEY
-#   TURNSTILE_SECRET_KEY
-#   ELEVENLABS_API_KEY  (optional, for /v1/tts)
-#   OPENAI_API_KEY      (optional, for /v1/tts fallback)
+#   ANTHROPIC_API_KEY    — Claude Haiku for /v1/script
+#   GOOGLE_TTS_API_KEY   — Google Cloud Text-to-Speech for /v1/tts (free tier covers 1M chars/month)
+#   TURNSTILE_SECRET_KEY — required before public deploy (see SECURITY.md)

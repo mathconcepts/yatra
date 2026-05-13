@@ -12,7 +12,7 @@ via `wrangler`. The React client talks to this Worker via the URL in
 1. Read `API.md` — the request/response contract.
 2. Read `SECURITY.md` — what must be true before deploying.
 3. `npm install`, copy `wrangler.toml.example` to `wrangler.toml`, fill account id.
-4. `wrangler secret put TURNSTILE_SECRET_KEY` and `ANTHROPIC_API_KEY`.
+4. `wrangler secret put TURNSTILE_SECRET_KEY`, `ANTHROPIC_API_KEY`, and `GOOGLE_TTS_API_KEY`. (For TTS: enable the Cloud Text-to-Speech API on a GCP project, create an API key restricted to that single API. Free tier covers 1M chars/month per voice family.)
 5. `npm run dev` — local Worker on `http://localhost:8787`.
 6. In the Vite client, set `.env.local`:
    ```
@@ -24,11 +24,11 @@ via `wrangler`. The React client talks to this Worker via the URL in
 
 ## Status
 
-Currently a **stub**. `/v1/script` echoes a one-scene placeholder. No
-upstream API calls happen yet. Auto-decided security controls
-(Turnstile, rate-limit, kill switch, R2 idempotency cache) exist as TODO
-markers in `src/index.js` — see `SECURITY.md` for the enforcement
-checklist that gates first deploy.
+v1.6.9 wires real upstream APIs:
+- **`/v1/script`** — calls Anthropic Claude Haiku 4.5 when `ANTHROPIC_API_KEY` is set; otherwise returns a stub one-scene placeholder so the network shape works without the key.
+- **`/v1/tts`** — calls Google Cloud Text-to-Speech when `GOOGLE_TTS_API_KEY` is set; otherwise returns 503 `tts-not-configured`. Google's free tier (1M chars/month per voice family) covers a side project end to end.
+
+Auto-decided security controls (Turnstile, rate-limit, kill switch, R2 idempotency cache) still exist as TODO markers in `src/index.js`. See `SECURITY.md` for the deploy gate.
 
 ## Pipeline (where this fits)
 

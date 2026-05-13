@@ -115,9 +115,10 @@ Generate a directed scene list for a route + tone + language.
 
 ---
 
-## `POST /v1/tts` (planned, not yet implemented)
+## `POST /v1/tts`
 
-Produce a single-scene narration audio buffer.
+Produce a single-scene narration audio buffer. Backed by Google Cloud
+Text-to-Speech (free tier 1M chars/month covers a side project end to end).
 
 ### Request body
 
@@ -125,21 +126,43 @@ Produce a single-scene narration audio buffer.
 {
   "tone": "devotional",
   "language": "te",
-  "voiceId": "REPLACE_TE_DEVOTIONAL",
+  "voiceId": "te-IN-Standard-A",
   "text": "ఆరంభం. యాదాద్రి కొండ దిగువన.",
   "tempo": 0.92
 }
 ```
 
+`voiceId` is a Google Cloud TTS voice name. The Devotional palette
+ships with `te-IN-Standard-A`, `hi-IN-Wavenet-A`, `ta-IN-Wavenet-A`, and
+`en-IN-Wavenet-A` baked in. `tempo` is mapped to Google's `speakingRate`
+in `[0.25, 4.0]`. `language` is one of `en | hi | te | ta` and is
+translated to a locale (`en-IN`, `hi-IN`, `te-IN`, `ta-IN`) before send.
+
 ### Response 200
 
-Audio bytes, `Content-Type: audio/mpeg` (or `audio/wav`).
-`X-Yatra-Provider: elevenlabs` or `openai` indicates which path served the request.
+Audio bytes, `Content-Type: audio/mpeg` (MP3 at 24 kHz mono). The client
+pipes this through `AudioContext.decodeAudioData` and aligns to the
+scene slot via `directorTTS.alignToSceneDuration`.
+
+Headers:
+- `X-Yatra-Provider: google-tts` — which backend served the request.
+
+### Error codes
+
+| Status | `type` slug | When |
+|-------:|-------------|------|
+| 400 | `invalid-request` | Missing/invalid field; unsupported language |
+| 503 | `tts-not-configured` | `GOOGLE_TTS_API_KEY` not provisioned on the Worker |
+| 401/403 | `upstream-tts` | Google rejected the key (revoked, restrictions, billing not enabled) |
+| 429 | `upstream-tts` | Google quota exceeded for the day/minute |
+| 504 | `upstream-tts` | Worker-side timeout (12s) hit before Google responded |
+| 502 | `upstream-tts` | Other Google failure or response missing `audioContent` |
 
 ### Streaming variant (planned)
 
-`POST /v1/tts:stream` returns `audio/mpeg` chunks via `Transfer-Encoding: chunked`
-so the client can begin playback inside ~1s instead of waiting for the full clip.
+`POST /v1/tts:stream` for chunked playback. Not implemented yet — short
+30-second narrations decode fast enough that the latency win isn't
+worth the complexity at this stage.
 
 ---
 

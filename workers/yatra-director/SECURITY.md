@@ -10,15 +10,17 @@ billing account. This doc is the enforcement checklist.
 Do not deploy to a public URL until every item is `[x]`.
 
 - [ ] `wrangler secret put TURNSTILE_SECRET_KEY` provisioned
-- [ ] Turnstile siteverify enforced in `/v1/script` (currently TODO)
+- [ ] Turnstile siteverify enforced in `/v1/script` and `/v1/tts` (currently TODO)
 - [ ] `wrangler secret put ANTHROPIC_API_KEY` provisioned
+- [ ] `wrangler secret put GOOGLE_TTS_API_KEY` provisioned (restricted to Cloud Text-to-Speech API on the GCP project)
 - [ ] CORS allowlist contains only known origins (no `*`, no `null`)
 - [ ] Durable Object `RateLimiter` bound, per-IP caps live (10/min, 60/hr, 200/day)
-- [ ] KV `BUDGET_KV` bound, daily-spend counter implemented
+- [ ] KV `BUDGET_KV` bound, daily-spend counter implemented for BOTH Anthropic and Google
 - [ ] `DIRECTOR_KILLSWITCH=0` set as a `[vars]` entry, runbook for flipping it to `1` documented
-- [ ] R2 `SCRIPT_CACHE` bound, idempotency cache on by hash(route + tone + language)
+- [ ] R2 `SCRIPT_CACHE` and `TTS_CACHE` bound, idempotency cache on by hash(route + tone + language) and hash(text + voiceId + tempo) respectively
 - [ ] Request logging redacts secrets (only `requestId`, never request body)
 - [ ] Cloudflare billing email alerts at $5, $25, $50/day
+- [ ] GCP billing alert at $5/month (Cloud TTS free tier is generous but bugs happen)
 
 ## Rotation cadence
 
@@ -59,17 +61,25 @@ unexpected billing activity:
 
 ## Cost ceiling
 
-Realistic per-render cost with the design doc's assumptions:
+Realistic per-render cost using the v1.6.9 backend choices (Google
+Cloud TTS instead of ElevenLabs):
 
 | Component | ~chars / call | unit cost | per-render |
 |----------:|--------------:|----------:|-----------:|
 | Claude Haiku (script) | ~1500 in / 800 out | ~$0.001 in / $0.005 out / 1M | ~$0.001 |
-| ElevenLabs Telugu narration | ~600 | $0.30 / 1k chars (multilingual v2) | ~$0.18 |
-| ElevenLabs × 4 languages | — | — | ~$0.72 |
+| Google TTS Wavenet (per language) | ~600 | $16 / 1M chars (Wavenet) — free below 1M chars/month | ~$0.0096 paid; $0 within free tier |
+| Google TTS × 4 languages | — | — | ~$0.04 paid; $0 within free tier |
 | Music bed | 0 | static asset | $0 |
-| **Total / multilingual render** | | | **~$0.72** |
+| **Total / multilingual render** | | | **~$0.04 (or $0 within free tier)** |
 
-Without idempotency: a share URL hit 10,000 times by a scraper = **$7,200**.
+The free-tier monthly allowance is 1M chars Standard + 1M chars Wavenet
++ 1M chars Neural2 per voice family. A side project shipping ~5 reels
+a day with 4 languages stays well inside free tier; a viral share that
+hits 10k times would burn through the month's allowance and trip into
+paid territory at ~$400/month worst case — vastly better than the
+ElevenLabs ~$7,200 figure that the autoplan flagged.
+
+Without idempotency cache, that worst case is still real.
 
 With idempotency (cache by `hash(route + tone + language + scriptText)`)
 + per-IP rate-limit + daily ceiling, a viral share is bounded to the cap.

@@ -2,6 +2,36 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.9] - 2026-05-13 — AI Cinematographer Step 9: `/v1/tts` backed by Google Cloud TTS (free tier)
+
+Per user request: swap the planned-ElevenLabs TTS backend for Google Cloud Text-to-Speech.
+Free tier covers 1M chars/month per voice family — effectively unmetered for a side
+project. Native Indic voices (`te-IN`, `hi-IN`, `ta-IN`) at Wavenet quality. Simple REST
++ API key auth (no OAuth flow, no WebSocket protocol-sniffing).
+
+### Added
+- **`workers/yatra-director/googleTtsClient.js`** with pure builders + thin fetch:
+  - `LANGUAGE_TO_LOCALE` — maps `en | hi | te | ta` to `en-IN | hi-IN | te-IN | ta-IN`. en-IN gives Indian-English accent, which fits the pilgrimage context better than en-US.
+  - `buildGoogleTtsRequest({text, voiceId, language, tempo})` — clamps `tempo` to Google's `[0.25, 4.0]` `speakingRate` range; defaults to 1.0 on garbage input; rejects unsupported language.
+  - `base64ToArrayBuffer` — strips whitespace defensively; works in both Worker and jsdom.
+  - `parseGoogleTtsResponse(json)` — decodes Google's `audioContent` base64 → ArrayBuffer.
+  - `callGoogleTTS({apiKey, text, voiceId, language, tempo, fetchImpl, timeoutMs})` — 12-second timeout via AbortController. Errors carry `code` (`auth | rate | timeout | parse`) so the Worker maps onto RFC-7807 status codes.
+- **Worker `/v1/tts` route** in `src/index.js` — calls Google TTS when `GOOGLE_TTS_API_KEY` is set, returns 503 `tts-not-configured` otherwise. Response is raw `audio/mpeg` bytes (not JSON-wrapped) so the client can pipe straight into `AudioContext.decodeAudioData` without unwrapping.
+
+### Changed
+- **`src/services/tonePalettes/devotional.js`** — replaced `REPLACE_*_DEVOTIONAL` placeholders with real Google Cloud TTS voice names: `te-IN-Standard-A`, `hi-IN-Wavenet-A`, `ta-IN-Wavenet-A`, `en-IN-Wavenet-A`. Devotional gets a calm female voice across all four languages by default.
+- **`API.md`** — full `/v1/tts` contract (request shape, response Content-Type, error codes); marks the section "implemented" (was "planned").
+- **`SECURITY.md`** — updated cost table to reflect Google TTS economics. Per-multilingual-render cost drops from the ElevenLabs $0.72 figure to ~$0.04 paid OR $0 within free tier. Added GCP billing-alert item to the pre-deploy checklist.
+- **`README.md`** — Status section now reflects "v1.6.9 wires real upstream APIs" with both Anthropic and Google paths documented.
+- **`wrangler.toml.example`** — secret list narrowed to the three keys actually used (Anthropic, Google, Turnstile).
+
+### Tests
+- 17 new tests on `googleTtsClient`: locale mapping, request assembly with speakingRate clamping and tempo defaults, base64 decoding (known string + whitespace-strip), response parsing (missing/empty/malformed), and the full `callGoogleTTS` surface (POST shape, auth/rate/timeout/parse error mapping, missing-audioContent rejection). Total: 509/509.
+
+### What's left
+- Worker hardening (Turnstile + DO rate-limit + KV daily ceiling + R2 idempotency cache + kill switch) before any public deploy. See `SECURITY.md`.
+- TTS quality validation. With Google TTS the validation flow changes shape: provision a free-tier GCP API key (5 min), `wrangler secret put GOOGLE_TTS_API_KEY`, hit `/v1/tts` from the local Director with one Telugu line, send the resulting MP4 to a relative. The $5 spend is gone — the test is now free.
+
 ## [1.6.8] - 2026-05-13 — AI Cinematographer Step 8: MP4 embeds the mixer's audio directly
 
 The audio gap from v1.6.7 closed. `encodeMp4` now accepts an `audioBuffer` option alongside
