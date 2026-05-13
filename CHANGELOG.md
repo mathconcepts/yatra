@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.3] - 2026-05-13 — AI Cinematographer Step 3: audio mixer (OfflineAudioContext-ready)
+
+The directorAudio.js mixer per the autoplan eng review's call: all math in Float32Array
+land so it's unit-testable, with a thin orchestrator that touches OfflineAudioContext
+through an injected `createBuffer`. Production passes
+`new OfflineAudioContext(1, length, sr).createBuffer.bind(ctx)`; tests pass a fake.
+
+### Added
+- **`src/services/directorAudio.js`** with pure primitives:
+  - `dbfsToGain(dbfs)` — handles 0, -6, -Infinity, NaN cleanly.
+  - `mixInto(out, source, {outOffset, gain, gainEnvelope})` — additive mix with clip to [-1, 1].
+  - `mixWithEqualPowerFade(out, source, {fadeSamples, ...})` — sin/cos endpoints land exactly at 0; for scene-boundary narration crossfade.
+  - `sidechainEnvelope(narration, {threshold, floorGain, attackMs, releaseMs, sampleRate})` — running-RMS windowed gate + one-pole attack/release. Music/ambient gain dips when narration is loud, recovers when silent.
+  - `ambientEnvelope(proximity, rule)` — gates ambient (temple bell, wind) by per-sample landmarkProximityFactor; linear interpolation between rule.gateAt → rule.peakAt.
+  - `loopToLength(source, lengthSamples)` — extend music beds to full render length.
+  - `concatenateNarration({sceneTracks, sceneStartsS, sampleRate, lengthSamples, crossfadeMs})` — assemble scene-by-scene TTS into a master narration channel.
+  - `mixDirectorAudio({sampleRate, durationS, sceneTracks, musicBed, ambientSources, proximityChannel, palette, createBuffer})` — orchestrator. Returns the AudioBuffer ready for the existing `encodeAacFromBuffer` path in audioEncode.js.
+
+### Tests
+- 27 new tests covering dB→gain, additive mix + clip, equal-power crossfade endpoints, sidechain attack/release, ambient gate/peak/saturate, music ducking under narration, ambient gated by proximity ramp, input validation. Total: 398/398.
+
+### What's wired vs not
+- Mixer is the **pipeline-final shape** — it produces what `encodeAacFromBuffer` already expects.
+- It is **not yet called** by `DirectorView`. That landing comes next, when `/v1/tts` is real and narration buffers exist to feed it.
+- The OfflineAudioContext call site that wraps this is a 4-line factory; deferred to the same commit that wires TTS so we don't introduce a dead call path.
+
 ## [1.6.2] - 2026-05-13 — AI Cinematographer Step 2b: wire compositor into reelRenderer (opt-in)
 
 Low-risk opt-in wiring of the v1.6.1 compositor into the existing offscreen reel renderer.

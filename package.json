@@ -1,7 +1,7 @@
 {
   "name": "yatra",
   "private": true,
-  "version": "1.6.2",
+  "version": "1.6.3",
   "description": "Extensible location-journey visualizer. Map any pilgrimage, trek, or route with real terrain tiles, real-time weather, and milestone storytelling.",
   "type": "module",
   "scripts": {
