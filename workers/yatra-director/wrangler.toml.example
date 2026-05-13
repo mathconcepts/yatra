@@ -28,9 +28,16 @@ compatibility_date = "2026-05-13"
 # binding = "TTS_CACHE"
 # id = "YOUR_TTS_CACHE_KV_ID"
 
+# Per-IP rate limiter (v1.6.11). Default limits: 10/min, 60/hr, 200/day.
+# Fail-open on DO error so a DO outage doesn't take down the Worker.
 # [[durable_objects.bindings]]
 # name = "RATE_LIMITER"
 # class_name = "RateLimiter"
+#
+# # Migration required to create the DO class (first deploy only):
+# [[migrations]]
+# tag = "v1"
+# new_classes = ["RateLimiter"]
 
 # [vars]
 # DIRECTOR_KILLSWITCH = "0"

@@ -22,6 +22,7 @@ import {
   putCached,
 } from "../idempotencyCache.js";
 import { checkBudget, recordSpend } from "../budgetGuard.js";
+import { consumeForIp, RateLimiter } from "../rateLimiter.js";
 import { SYSTEM_PROMPTS } from "./prompts.js";
 
 const TOTAL_DURATION_S = 30;
@@ -132,6 +133,39 @@ async function preflight({ request, env, origin, id, route, body, cost = null })
           requestId: id,
         }),
         origin,
+      );
+    }
+  }
+
+  // 2.5. Per-IP rate limit — bypassed when RATE_LIMITER DO binding
+  // absent. Fail-open on DO errors (see rateLimiter.consumeForIp).
+  if (env?.RATE_LIMITER) {
+    const ip = request.headers.get("CF-Connecting-IP") || "anon";
+    const rl = await consumeForIp(env, ip);
+    if (!rl.allowed) {
+      return new Response(
+        JSON.stringify(
+          problem({
+            slug: "rate-limited",
+            title: "Too many requests",
+            status: 429,
+            detail: `Per-IP ${rl.window} limit reached. Wait ${Math.ceil((rl.retryAfterMs || 0) / 1000)}s.`,
+            fix: "Slow down and retry after the window resets.",
+            requestId: id,
+          }),
+        ),
+        {
+          status: 429,
+          headers: {
+            "Content-Type": "application/json",
+            "Retry-After": String(Math.ceil((rl.retryAfterMs || 60_000) / 1000)),
+            "X-RateLimit-Limit": String(rl.limit ?? ""),
+            "X-RateLimit-Remaining": "0",
+            "X-RateLimit-Reset": String(Math.floor((rl.resetAtMs || Date.now()) / 1000)),
+            "X-RateLimit-Window": rl.window || "",
+            ...corsHeaders(origin),
+          },
+        },
       );
     }
   }
@@ -465,6 +499,10 @@ async function handleTts(request, env, origin) {
     );
   }
 }
+
+// Re-export the Durable Object class so Wrangler can register it via
+// the [[durable_objects.bindings]] entry in wrangler.toml.
+export { RateLimiter };
 
 export default {
   async fetch(request, env, _ctx) {

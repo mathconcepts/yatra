@@ -1,6 +1,6 @@
 # yatra-director — Security & Cost
 
-> **Status at v1.6.10:** Turnstile, kill switch, idempotency cache, and daily-budget guard are all wired and active. Per-IP rate-limit (Durable Object) is the last auto-decided control still TODO. Each gate degrades cleanly when its binding/secret is absent, so a key-less local dev environment still works; production deploys MUST provision the full set per the checklist below.
+> **Status at v1.6.11:** All five auto-decided Worker controls are wired and active: kill switch, Turnstile, per-IP rate limit (Durable Object, 10/min · 60/hr · 200/day), daily-budget guard, idempotency cache. Each gate degrades cleanly when its binding/secret is absent, so a key-less local dev environment still works; production deploys MUST provision the full set per the checklist below.
 
 
 The Worker holds three classes of paid API keys (Anthropic, ElevenLabs, OpenAI).
@@ -17,7 +17,7 @@ Do not deploy to a public URL until every item is `[x]`.
 - [ ] `wrangler secret put ANTHROPIC_API_KEY` provisioned
 - [ ] `wrangler secret put GOOGLE_TTS_API_KEY` provisioned (restricted to Cloud Text-to-Speech API on the GCP project)
 - [ ] CORS allowlist contains only known origins (no `*`, no `null`)
-- [ ] Durable Object `RateLimiter` bound, per-IP caps live (10/min, 60/hr, 200/day)
+- [x] Durable Object `RateLimiter` bound (v1.6.11; defaults to 10/min, 60/hr, 200/day; needs the `[[migrations]] new_classes = ["RateLimiter"]` line in `wrangler.toml` on first deploy)
 - [ ] KV `BUDGET_KV` bound, daily-spend counter implemented for BOTH Anthropic and Google
 - [ ] `DIRECTOR_KILLSWITCH=0` set as a `[vars]` entry, runbook for flipping it to `1` documented
 - [ ] R2 `SCRIPT_CACHE` and `TTS_CACHE` bound, idempotency cache on by hash(route + tone + language) and hash(text + voiceId + tempo) respectively

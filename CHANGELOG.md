@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.11] - 2026-05-13 — AI Cinematographer Step 11: per-IP rate limit (Durable Object)
+
+The last auto-decided Worker control. With this commit, the deploy gate from the autoplan
+review is fully addressed — every layer from the design doc's distribution plan is now
+wired. Defaults: 10/min, 60/hr, 200/day per IP. Three-window check catches both
+short-burst abuse and slow-trickle scrapers.
+
+### Added
+- **`workers/yatra-director/rateLimiter.js`**:
+  - Pure helpers `bucketId`, `nextBucketStartMs`, `rolloverState`, `emptyState`.
+  - `checkAndConsume(state, nowMs, limits)` — pure (state, time, limits) → `{state, allowed, limit, remaining, resetAtMs, retryAfterMs, window}`. Blocks on the tightest binding window. Does NOT consume on a blocked request (no double-jeopardy).
+  - `RateLimiter` Durable Object class — thin wrapper around `checkAndConsume` that persists state per IP. `state.storage.get("state")` → `checkAndConsume` → `state.storage.put("state", ...)`.
+  - `consumeForIp(env, ip, limits)` — Worker-side helper that fetches the DO stub for an IP and returns the audit struct. Fail-open on any DO error (DO down, malformed response) — pragmatic side-project default; SECURITY.md notes the trade-off.
+
+### Changed
+- **`src/index.js`** — `preflight` now runs rate-limit between Turnstile and budget. 429 responses carry full `X-RateLimit-*` headers (`Limit`, `Remaining`, `Reset`, `Window`) plus `Retry-After` so HTTP clients backoff correctly. Re-exports `RateLimiter` so Wrangler can register the DO class.
+- **`wrangler.toml.example`** — documents the `[[durable_objects.bindings]] + [[migrations]]` block needed to create the DO class on first deploy.
+- **`SECURITY.md`** — status banner updated; all five auto-decided controls now wired. Pre-deploy checklist's rate-limit item ticked.
+
+### Tests
+- 14 new tests in `test/rate-limiter.test.js`: bucket math (monotonic, stable inside windows, next-edge), rollover (zeroes only crossed windows, preserves the others, minute-only rollover), checkAndConsume (allow path, three-window blocking with correct binding window, no-consume-on-block invariant, minute rollover restores access, hourly cap binds when minute is fresh, default limits, tightest-window remaining math, future resetAtMs). Total: 578/578.
+
+### What this closes
+The pre-deploy checklist from `SECURITY.md` is now fully addressable with no further code. The remaining items are operational: provision Turnstile secrets, create the KV namespaces and DO migration, set the GCP key, run `wrangler deploy`. Public deploy is no longer gated on engineering — only on TTS quality validation and your decision to go public.
+
 ## [1.6.10] - 2026-05-13 — AI Cinematographer Step 10: Worker hardening (Turnstile + cache + budget + kill switch)
 
 Four of the five auto-decided Worker controls land. Each gate degrades cleanly when its
