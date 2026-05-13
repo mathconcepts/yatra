@@ -107,9 +107,13 @@ export async function encodeMp4(frames, {
     fastStart: "in-memory",
   });
 
+  let encoderError = null;
   const videoEncoder = new globalThis.VideoEncoder({
-    output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
-    error: (e) => { throw e; },
+    output: (chunk, meta) => {
+      try { muxer.addVideoChunk(chunk, meta); }
+      catch (e) { encoderError = e; }
+    },
+    error: (e) => { encoderError = e; },
   });
   videoEncoder.configure({
     codec: "avc1.42E01E",
@@ -120,15 +124,27 @@ export async function encodeMp4(frames, {
 
   const frameIntervalUs = Math.floor(1_000_000 / fps);
   for (let i = 0; i < frames.length; i++) {
+    if (encoderError || videoEncoder.state === "closed") break;
     const f = frames[i];
     const frame = new globalThis.VideoFrame(f, { timestamp: i * frameIntervalUs });
-    videoEncoder.encode(frame, { keyFrame: i % fps === 0 });
+    try {
+      videoEncoder.encode(frame, { keyFrame: i % fps === 0 });
+    } catch (e) {
+      encoderError = e;
+      frame.close();
+      break;
+    }
     frame.close();
     if (typeof onProgress === "function") onProgress(i + 1, frames.length);
     if (i % fps === 0) await new Promise((r) => setTimeout(r, 0));
   }
-  await videoEncoder.flush();
-  videoEncoder.close();
+  if (videoEncoder.state !== "closed") {
+    try { await videoEncoder.flush(); } catch (e) { encoderError = encoderError || e; }
+    try { videoEncoder.close(); } catch { /* already closed */ }
+  }
+  if (encoderError) {
+    throw new Error(`Video encode failed: ${encoderError.message || encoderError}`);
+  }
 
   // Audio path (Slice I).
   if (audioPlan) {

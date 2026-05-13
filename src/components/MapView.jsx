@@ -61,6 +61,9 @@ export default function MapView({
         ],
       }),
       attributionControl: { compact: true },
+      // canvas.toBlob returns a transparent image without this — the WebGL
+      // context clears between frames otherwise. Required for PNG export.
+      preserveDrawingBuffer: true,
     });
 
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");

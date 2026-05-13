@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.1] - 2026-05-13 — QA pass on v1.5.0
+
+User-reported issues from the Atlas compare + universal export ship.
+
+### Fixed
+- **Atlas Snapshot PNG returned a blank image.** Root cause: MapLibre's WebGL context clears between frames; `canvas.toBlob` captured the cleared buffer. Added `preserveDrawingBuffer: true` to `MapView`'s map constructor. PNG snapshots now contain the rendered scene.
+- **MP4 export failed with "Cannot call 'encode' on a closed codec".** The encoder's `error` callback was throwing synchronously, closing the encoder while the loop kept calling `encode()`. Replaced with an `encoderError` flag — the loop now checks `videoEncoder.state` + the flag and breaks cleanly. Errors surface as `Video encode failed: ${message}` instead of cryptic codec errors.
+- **Export menu overlapped the surface toggle stack.** `.atlas-export` was rendered in document flow at the end of JourneyMap with no positioning, so it landed wherever the layout pushed it. Moved to `position: fixed; bottom: 16px; left: 192px` — sits just right of the toggle column with a 160px width.
+- **GpxImporter only accepted a single file.** Now `<input multiple>` and the parser concatenates tracks in selection order. UI surface shows "Imported N points from M tracks." Adaptive simplification still caps the combined route at 500 points.
+- **Atlas "Compare all" didn't visually indicate both routes were selected.** Both individual route tabs now highlight as "active" while in compare mode (boxShadow underline of each route's color), and the Compare All tab itself flips its label to "Comparing ✓". Lines were already rendering at full weight; the missing signal was just visual.
+
+### Deferred (TODOS.md)
+- Atlas Compare All — dual-marker playback (today: lines visible, marker still follows single route)
+- Split-screen vertical compare (Reels-format compare for social share)
+
 ## [1.5.0] - 2026-05-13 — Compare + universal export (v3.4 Waves B + C, lean cut)
 
 ### Added
