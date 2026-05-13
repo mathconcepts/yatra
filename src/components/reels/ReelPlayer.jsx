@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import MapView from "../MapView";
 import { interpolateRoute } from "../../utils/route";
 import { planCamera, sampleCameraPlan } from "../../services/moodCamera";
+import { applyCameraMode, CAMERA_MODES } from "../../services/cameraModes";
+import { detectPeakMoments } from "../../services/peakMoments";
 import { polishedBlurb } from "../../services/polishedPostcards";
 import AutoCameraPill from "./AutoCameraPill";
 
@@ -9,6 +11,13 @@ const LOOP_SECONDS = 22;          // one full traversal
 const REACT_UPDATE_MS = 200;      // React re-render cadence for marker + UI
 const AUTO_RESUME_MS = 5000;      // 5 s no-touch → auto resumes
 const HAPTIC_MS = 30;             // tap-tick haptic on resume
+
+const CAM_MODE_LABELS = {
+  default: "Mood",
+  birdseye: "Bird",
+  chase: "Chase",
+  orbit: "Orbit",
+};
 
 /**
  * Single vertical 9:16 reel.
@@ -29,6 +38,7 @@ const HAPTIC_MS = 30;             // tap-tick haptic on resume
 export default function ReelPlayer({ config }) {
   const route = config.routes?.[0];
   const plan = useMemo(() => planCamera(config), [config]);
+  const peakMoments = useMemo(() => detectPeakMoments(config), [config]);
 
   // Refs — NOT React state. The rAF loop reads/writes these directly.
   const mapRef = useRef(null);
@@ -49,6 +59,9 @@ export default function ReelPlayer({ config }) {
   const [manualKey, setManualKey] = useState(0);
   const [basemap, setBasemap] = useState(config.topography?.basemap || "topo");
   const [postcardOpen, setPostcardOpen] = useState(true);
+  const [cameraMode, setCameraMode] = useState("default");
+  const cameraModeRef = useRef("default");
+  useEffect(() => { cameraModeRef.current = cameraMode; }, [cameraMode]);
 
   useEffect(() => { playingRef.current = playing; }, [playing]);
   useEffect(() => { interactionModeRef.current = interactionMode; }, [interactionMode]);
@@ -121,11 +134,16 @@ export default function ReelPlayer({ config }) {
           const pos = interpolateRoute(wps, t);
           const cam = sampleCameraPlan(plan, t);
           if (cam && pos) {
+            const finalCam = applyCameraMode(cam, {
+              mode: cameraModeRef.current,
+              t,
+              baseZoom: config.topography?.zoom ?? 12,
+            });
             map.jumpTo({
               center: [pos.lon, pos.lat],
-              zoom: cam.zoom,
-              pitch: cam.pitch,
-              bearing: cam.bearing,
+              zoom: finalCam.zoom,
+              pitch: finalCam.pitch,
+              bearing: finalCam.bearing,
             });
           }
         }
@@ -186,6 +204,12 @@ export default function ReelPlayer({ config }) {
     enterManual();
     setTick((n) => n + 1);
   };
+
+  const jumpToT = useCallback((t) => {
+    progressRef.current = Math.max(0, Math.min(1, t));
+    startedAtRef.current = null;
+    setTick((n) => n + 1);
+  }, []);
 
   const currentPos = route ? interpolateRoute(route.waypoints, progressRef.current) : null;
 
@@ -248,6 +272,21 @@ export default function ReelPlayer({ config }) {
         ))}
       </div>
 
+      <div className="reel-cammode" role="group" aria-label="Camera mode">
+        {CAMERA_MODES.map((m) => (
+          <button
+            key={m}
+            type="button"
+            className={`reel-cammode-btn${cameraMode === m ? " active" : ""}`}
+            onClick={() => setCameraMode(m)}
+            aria-pressed={cameraMode === m}
+            title={CAM_MODE_LABELS[m]}
+          >
+            {CAM_MODE_LABELS[m]}
+          </button>
+        ))}
+      </div>
+
       {interactionMode === "manual" && (
         <button
           type="button"
@@ -284,6 +323,22 @@ export default function ReelPlayer({ config }) {
               )}
             </>
           )}
+        </div>
+      )}
+
+      {peakMoments.length > 0 && (
+        <div className="reel-chips" role="group" aria-label="Best moments — tap to jump">
+          {peakMoments.map((c, i) => (
+            <button
+              key={`${c.kind}-${i}`}
+              type="button"
+              className={`reel-chip reel-chip-${c.kind}`}
+              onClick={() => jumpToT(c.t)}
+              title={`${c.label} (${Math.round(c.t * 100)}%)`}
+            >
+              {c.label}
+            </button>
+          ))}
         </div>
       )}
 

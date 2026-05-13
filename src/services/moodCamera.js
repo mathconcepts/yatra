@@ -60,12 +60,51 @@ export function localSlope(waypoints, t, window = 0.05) {
 }
 
 /**
+ * Pure: local speed factor — distance covered per unit t-progress in a
+ * small window. Normalized against the average route segment so the
+ * output is roughly 0..2 where 1 = average pace. Slow sections (zig-zags,
+ * dense detail) return < 1; fast sections (long straights) return > 1.
+ */
+export function localSpeedFactor(waypoints, t, window = 0.05) {
+  if (!waypoints || waypoints.length < 2) return 1;
+  const aT = Math.max(0, t - window);
+  const bT = Math.min(1, t + window);
+  const a = interpolateRoute(waypoints, aT);
+  const b = interpolateRoute(waypoints, bT);
+  if (!a || !b) return 1;
+  const localKm = distanceKm(a, b);
+  let total = 0;
+  for (let i = 1; i < waypoints.length; i++) total += distanceKm(waypoints[i - 1], waypoints[i]);
+  const avgKmPerT = total / 1; // total / range(t) where range(t) = 1
+  const windowKmPerT = localKm / (bT - aT || 1);
+  if (avgKmPerT <= 0) return 1;
+  return clamp(windowKmPerT / avgKmPerT, 0, 3);
+}
+
+/**
+ * Pure: proximity factor — 0..1 score for "are we right next to a
+ * landmark?" Returns 1 when within ~0.5 km of any landmark; falls off
+ * to 0 by ~3 km. Drives the "slow zoom near landmarks" adaptive rule.
+ */
+export function landmarkProximityFactor(landmarks, pos, { nearKm = 0.5, farKm = 3 } = {}) {
+  if (!pos || !Array.isArray(landmarks) || landmarks.length === 0) return 0;
+  let minD = Infinity;
+  for (const lm of landmarks) {
+    const d = distanceKm(pos, lm);
+    if (d < minD) minD = d;
+  }
+  if (minD <= nearKm) return 1;
+  if (minD >= farKm) return 0;
+  return 1 - (minD - nearKm) / (farKm - nearKm);
+}
+
+/**
  * Terrain heuristic. Returns CameraStep[] sampled at 8 evenly-spaced t.
  *
  * Pitch range 30..60. Steeper → higher pitch + tighter zoom. Bearing
  * sweeps gently across the journey for visual variety.
  */
-export function terrainHeuristic(route, _landmarks = [], { baseZoom = 12.5 } = {}) {
+export function terrainHeuristic(route, landmarks = [], { baseZoom = 12.5 } = {}) {
   const wps = route?.waypoints || [];
   if (wps.length < 2) return [];
   const N = 8;
@@ -74,10 +113,25 @@ export function terrainHeuristic(route, _landmarks = [], { baseZoom = 12.5 } = {
     const t = i / (N - 1);
     const slope = localSlope(wps, t);
     const slopeScore = clamp(slope * 30, 0, 1); // 30 m gain over 1 km == max intensity
-    const pitch = clamp(30 + slopeScore * 30, 25, 60);
-    const zoom = clamp(baseZoom + slopeScore * 1.5, baseZoom - 0.5, baseZoom + 1.5);
+    // v3.3 adaptive cadence: landmark proximity tightens zoom + tilts up;
+    // local speed eases pitch back on fast straights (gives the eye room).
+    const here = interpolateRoute(wps, t);
+    const proximity = landmarkProximityFactor(landmarks, here);
+    const speed = localSpeedFactor(wps, t);
+    const speedDamp = clamp(1 - (speed - 1) * 0.3, 0.6, 1);
+    const pitch = clamp(
+      30 + slopeScore * 30 * speedDamp + proximity * 8,
+      25, 65
+    );
+    const zoom = clamp(
+      baseZoom + slopeScore * 1.5 + proximity * 1.2,
+      baseZoom - 0.5,
+      baseZoom + 2.5
+    );
     const bearing = -25 + Math.sin(t * Math.PI) * 35;
-    steps.push({ t, zoom, pitch, bearing });
+    const step = { t, zoom, pitch, bearing };
+    if (proximity > 0.7) step.holdMs = 600; // pause at landmark crossings
+    steps.push(step);
   }
   return steps;
 }
