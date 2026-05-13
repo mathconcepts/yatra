@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.10] - 2026-05-13 — AI Cinematographer Step 10: Worker hardening (Turnstile + cache + budget + kill switch)
+
+Four of the five auto-decided Worker controls land. Each gate degrades cleanly when its
+binding/secret is absent, so dev still works key-less; production deploys provision the
+full set per the SECURITY.md checklist. Per-IP rate-limit (Durable Object) is the last
+TODO; it ships in v1.6.11.
+
+### Added
+- **`workers/yatra-director/turnstile.js`** — pure `parseTurnstileResponse` + thin `verifyTurnstileToken({token, secret, remoteIp, fetchImpl, timeoutMs})` wrapper. Errors carry `code` (`missing-token | missing-secret | timeout | network`) for RFC-7807 mapping.
+- **`workers/yatra-director/idempotencyCache.js`** — `sha256Hex`, `buildScriptCacheKey({routeId, tone, language, durationS})`, `buildTtsCacheKey({voiceId, tempo, text, language})` (text is sha256-hashed before being put in the key so raw user content never lands in the cache namespace), `getCached(kv, key, {as})`, `putCached(kv, key, value, {as, ttlS})`. 30-day TTL by default.
+- **`workers/yatra-director/budgetGuard.js`** — `dayKey(date)` (UTC YYYY-MM-DD), `estimateCost(route, body)` in millicents (1¢ per script, ~26mc per 1k chars of TTS), `readSpend(kv, key)`, `recordSpend(kv, key, costMc)`, `checkBudget({kv, route, body, cap, now})` → `{allowed, projected, cost, prior, cap, key}`.
+- **Shared `preflight({request, env, origin, id, route, body})`** in `src/index.js` running kill switch → Turnstile → daily budget. Same gate uniformly applied to `/v1/script` and `/v1/tts`.
+- **Cache headers** — every cached hit/miss labels itself via `X-Yatra-Cache: hit|miss` so the client (and you, in DevTools) can see whether a request hit upstream.
+
+### Changed
+- **`workers/yatra-director/src/index.js`** — both handlers now run `preflight`, look up an idempotency cache before calling upstream, record spend + write cache on success. Three of the four TODO blocks from earlier commits are now resolved.
+- **`SECURITY.md`** — pre-deploy checklist updated; status banner at the top reflects the v1.6.10 surface. Per-IP rate limit is the only item still marked TODO.
+- **`wrangler.toml.example`** — bindings expanded (`BUDGET_KV`, `SCRIPT_CACHE`, `TTS_CACHE`), all annotated as optional with degraded behavior documented. New var `DIRECTOR_DAILY_CAP_MILLICENTS` (default 500000 = $5/day).
+
+### Tests
+- 49 new tests across three suites:
+  - `test/turnstile.test.js` (10): form-encoded body, success/rejection parsing, missing-token/secret rejection, timeout/network error mapping, remoteIp inclusion.
+  - `test/idempotency-cache.test.js` (16): known sha256 vectors (empty + "abc"), key stability across calls, key divergence across inputs, raw-text-never-in-key invariant, JSON + ArrayBuffer round-trips, unbound-KV no-op, error swallowing, default + explicit TTL.
+  - `test/budget-guard.test.js` (23): UTC dayKey, cost estimation by route + text length, spend accumulation across calls, unbound-KV/get-throw/garbage-value handling, custom-cap respect, today's-key selection.
+- Total: 564/564.
+
+### Deploy gate (one item left)
+Per-IP rate limit needs a Durable Object class binding. Ships in v1.6.11 — pure code, no key required, but the gate is most useful when it can actually serve traffic.
+
 ## [1.6.9] - 2026-05-13 — AI Cinematographer Step 9: `/v1/tts` backed by Google Cloud TTS (free tier)
 
 Per user request: swap the planned-ElevenLabs TTS backend for Google Cloud Text-to-Speech.

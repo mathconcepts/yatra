@@ -8,15 +8,25 @@ compatibility_date = "2026-05-13"
 # account_id = "YOUR_CLOUDFLARE_ACCOUNT_ID"
 
 # Bindings to provision before going live. Names are referenced by src/index.js.
-# Uncomment after creating each resource.
+# Uncomment after creating each resource (`wrangler kv namespace create <name>`).
+#
+# All bindings are OPTIONAL. The Worker degrades cleanly when each is absent:
+#   - No SCRIPT_CACHE / TTS_CACHE → every request hits upstream (no caching).
+#   - No BUDGET_KV → daily-spend gate is bypassed (rely on Cloudflare + GCP billing alerts).
+#   - No DIRECTOR_KILLSWITCH var → kill switch defaults off.
+# Recommended for any public deploy: bind all three KV namespaces.
 
 # [[kv_namespaces]]
 # binding = "BUDGET_KV"
 # id = "YOUR_BUDGET_KV_ID"
 
-# [[r2_buckets]]
+# [[kv_namespaces]]
 # binding = "SCRIPT_CACHE"
-# bucket_name = "yatra-director-script-cache"
+# id = "YOUR_SCRIPT_CACHE_KV_ID"
+
+# [[kv_namespaces]]
+# binding = "TTS_CACHE"
+# id = "YOUR_TTS_CACHE_KV_ID"
 
 # [[durable_objects.bindings]]
 # name = "RATE_LIMITER"
@@ -24,6 +34,7 @@ compatibility_date = "2026-05-13"
 
 # [vars]
 # DIRECTOR_KILLSWITCH = "0"
+# DIRECTOR_DAILY_CAP_MILLICENTS = "500000"   # $5 / day. 1 millicent = 0.001 cent.
 
 # Secrets (set via `wrangler secret put <NAME>`, never put in this file):
 #   ANTHROPIC_API_KEY    — Claude Haiku for /v1/script

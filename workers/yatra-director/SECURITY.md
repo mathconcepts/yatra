@@ -1,5 +1,8 @@
 # yatra-director — Security & Cost
 
+> **Status at v1.6.10:** Turnstile, kill switch, idempotency cache, and daily-budget guard are all wired and active. Per-IP rate-limit (Durable Object) is the last auto-decided control still TODO. Each gate degrades cleanly when its binding/secret is absent, so a key-less local dev environment still works; production deploys MUST provision the full set per the checklist below.
+
+
 The Worker holds three classes of paid API keys (Anthropic, ElevenLabs, OpenAI).
 A public share URL exposes the Worker URL to anyone who opens the network
 panel. Without the controls below, a single scraper loop can drain the

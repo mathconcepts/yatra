@@ -14,6 +14,14 @@
 import { validateScriptRequest, problem } from "../schemas.js";
 import { callClaude } from "../claudeClient.js";
 import { callGoogleTTS, LANGUAGE_TO_LOCALE } from "../googleTtsClient.js";
+import { verifyTurnstileToken } from "../turnstile.js";
+import {
+  buildScriptCacheKey,
+  buildTtsCacheKey,
+  getCached,
+  putCached,
+} from "../idempotencyCache.js";
+import { checkBudget, recordSpend } from "../budgetGuard.js";
 import { SYSTEM_PROMPTS } from "./prompts.js";
 
 const TOTAL_DURATION_S = 30;
@@ -45,18 +53,124 @@ function reqId() {
   return crypto.randomUUID();
 }
 
+/**
+ * Pre-flight: kill switch, Turnstile, budget. Returns either a Response
+ * (caller should return it directly) or null (proceed). Same set of
+ * checks for /v1/script and /v1/tts so the gate behavior stays uniform.
+ *
+ * Kill switch is checked first because it's the cheapest exit.
+ */
+async function preflight({ request, env, origin, id, route, body, cost = null }) {
+  // 1. Kill switch — operator can flip this to halt all paid work.
+  if (env?.DIRECTOR_KILLSWITCH === "1") {
+    return jsonResponse(
+      503,
+      problem({
+        slug: "killswitch",
+        title: "Director is paused",
+        status: 503,
+        detail: "Operator has flipped DIRECTOR_KILLSWITCH. All paid routes are returning 503.",
+        fix: "Set DIRECTOR_KILLSWITCH=0 in Worker vars and redeploy to resume.",
+        requestId: id,
+      }),
+      origin,
+    );
+  }
+
+  // 2. Turnstile — required when TURNSTILE_SECRET_KEY is provisioned.
+  // For dev environments without the secret, the gate is bypassed so
+  // local iteration stays fast. SECURITY.md gates production deploy on
+  // the secret being set.
+  if (env?.TURNSTILE_SECRET_KEY) {
+    const token = request.headers.get("X-Yatra-Turnstile") || "";
+    if (!token) {
+      return jsonResponse(
+        401,
+        problem({
+          slug: "turnstile-missing",
+          title: "Turnstile token required",
+          status: 401,
+          detail: "Mutating routes require an X-Yatra-Turnstile header.",
+          fix: "Render the Turnstile widget on the page and forward its token with each request.",
+          requestId: id,
+        }),
+        origin,
+      );
+    }
+    try {
+      const result = await verifyTurnstileToken({
+        token,
+        secret: env.TURNSTILE_SECRET_KEY,
+        remoteIp: request.headers.get("CF-Connecting-IP") || null,
+      });
+      if (!result.ok) {
+        return jsonResponse(
+          403,
+          problem({
+            slug: "turnstile-failed",
+            title: "Turnstile rejected the token",
+            status: 403,
+            detail: `Cloudflare rejected the challenge: ${result.errorCodes.join(", ") || "no detail"}`,
+            fix: "Re-render the Turnstile widget; tokens are single-use.",
+            requestId: id,
+          }),
+          origin,
+        );
+      }
+    } catch (err) {
+      const code = err?.code || "network";
+      const status = code === "timeout" ? 504 : 502;
+      return jsonResponse(
+        status,
+        problem({
+          slug: "turnstile-failed",
+          title: "Turnstile verification failed",
+          status,
+          detail: err?.message || String(err),
+          cause: `turnstile code=${code}`,
+          fix: "Transient — retry. If repeated, check Cloudflare status.",
+          requestId: id,
+        }),
+        origin,
+      );
+    }
+  }
+
+  // 3. Daily budget — bypassed when BUDGET_KV is not bound. The cap is
+  // set via env.DIRECTOR_DAILY_CAP_MILLICENTS (defaults to 500_000 = $5).
+  if (env?.BUDGET_KV) {
+    const cap = Number(env.DIRECTOR_DAILY_CAP_MILLICENTS);
+    const check = await checkBudget({
+      kv: env.BUDGET_KV,
+      route,
+      body,
+      cap: Number.isFinite(cap) && cap > 0 ? cap : undefined,
+    });
+    if (!check.allowed) {
+      return jsonResponse(
+        503,
+        problem({
+          slug: "daily-cap",
+          title: "Daily budget exhausted",
+          status: 503,
+          detail: `Projected spend ${check.projected} millicents would exceed cap ${check.cap}. Counter resets at UTC midnight.`,
+          fix: "Wait until tomorrow, raise DIRECTOR_DAILY_CAP_MILLICENTS in Worker vars, or set DIRECTOR_KILLSWITCH=0 once you've confirmed traffic is legitimate.",
+          requestId: id,
+        }),
+        origin,
+      );
+    }
+  }
+
+  return null;
+}
+
 async function handleScript(request, env, origin) {
   const id = reqId();
 
-  // TODO(security/auth): verify X-Yatra-Turnstile via Turnstile siteverify
-  // (env.TURNSTILE_SECRET_KEY). Reject with 401 turnstile-missing /
-  // 403 turnstile-failed per API.md.
-
   // TODO(security/rate-limit): bind a Durable Object and bump per-IP counters.
-  // Soft headers (X-RateLimit-Remaining) on the response.
-
-  // TODO(security/killswitch): if env.DIRECTOR_KILLSWITCH === "1" OR
-  // daily-spend KV is exhausted, return 503 killswitch.
+  // Per-IP rate-limit is the only auto-decided control still TODO at v1.6.10;
+  // it needs an actual DO binding and is the next commit.
 
   let body;
   try {
@@ -110,6 +224,32 @@ async function handleScript(request, env, origin) {
     );
   }
 
+  // Pre-flight: kill switch + Turnstile + budget. Returns a Response on
+  // failure (we forward it) or null to proceed.
+  const blocked = await preflight({ request, env, origin, id, route: "/v1/script", body });
+  if (blocked) return blocked;
+
+  // Idempotency cache lookup. A hot share URL serves from KV after the
+  // first request — same content, zero upstream cost. Free tier covers
+  // 100k reads/day which is generous for a side project.
+  const cacheKey = await buildScriptCacheKey({
+    routeId: body.routeId,
+    tone: body.tone,
+    language: body.language,
+    durationS: TOTAL_DURATION_S,
+  });
+  const cached = await getCached(env?.SCRIPT_CACHE, cacheKey, { as: "json" });
+  if (cached) {
+    return new Response(JSON.stringify(cached), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json",
+        "X-Yatra-Cache": "hit",
+        ...corsHeaders(origin),
+      },
+    });
+  }
+
   // If the API key is not provisioned (dev environments, first-deploy
   // verification), fall back to a stub echo so the network path still
   // works end-to-end. SECURITY.md requires the key be present before
@@ -147,7 +287,21 @@ async function handleScript(request, env, origin) {
       body,
       totalDurationS: TOTAL_DURATION_S,
     });
-    return jsonResponse(200, result, origin);
+    // Record spend + cache the result. Both swallow errors so they
+    // can't take down a successful response.
+    if (env?.BUDGET_KV) {
+      const c = await checkBudget({ kv: env.BUDGET_KV, route: "/v1/script", body });
+      await recordSpend(env.BUDGET_KV, c.key, c.cost);
+    }
+    await putCached(env?.SCRIPT_CACHE, cacheKey, result, { as: "json" });
+    return new Response(JSON.stringify(result), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json",
+        "X-Yatra-Cache": "miss",
+        ...corsHeaders(origin),
+      },
+    });
   } catch (err) {
     const code = err?.code || "parse";
     const statusByCode = { auth: 502, timeout: 504, rate: 503, parse: 502 };
@@ -185,9 +339,8 @@ async function handleScript(request, env, origin) {
 async function handleTts(request, env, origin) {
   const id = reqId();
 
-  // TODO(security/auth): verify X-Yatra-Turnstile.
-  // TODO(security/rate-limit): per-IP Durable Object counters.
-  // TODO(security/killswitch): env.DIRECTOR_KILLSWITCH || daily budget exhausted.
+  // TODO(security/rate-limit): per-IP Durable Object counters — the last
+  // auto-decided control still TODO at v1.6.10. Lands in the next commit.
 
   let body;
   try {
@@ -251,6 +404,25 @@ async function handleTts(request, env, origin) {
     );
   }
 
+  // Pre-flight: kill switch + Turnstile + budget.
+  const blocked = await preflight({ request, env, origin, id, route: "/v1/tts", body });
+  if (blocked) return blocked;
+
+  // Idempotency cache lookup — by content fingerprint, not the raw text.
+  const cacheKey = await buildTtsCacheKey({ voiceId, tempo, text, language });
+  const cachedAudio = await getCached(env?.TTS_CACHE, cacheKey, { as: "arrayBuffer" });
+  if (cachedAudio) {
+    return new Response(cachedAudio, {
+      status: 200,
+      headers: {
+        "Content-Type": "audio/mpeg",
+        "X-Yatra-Provider": "google-tts",
+        "X-Yatra-Cache": "hit",
+        ...corsHeaders(origin),
+      },
+    });
+  }
+
   try {
     const audio = await callGoogleTTS({
       apiKey: env.GOOGLE_TTS_API_KEY,
@@ -259,11 +431,18 @@ async function handleTts(request, env, origin) {
       language,
       tempo,
     });
+    // Record spend + cache the audio. Both swallow errors.
+    if (env?.BUDGET_KV) {
+      const c = await checkBudget({ kv: env.BUDGET_KV, route: "/v1/tts", body });
+      await recordSpend(env.BUDGET_KV, c.key, c.cost);
+    }
+    await putCached(env?.TTS_CACHE, cacheKey, audio, { as: "arrayBuffer" });
     return new Response(audio, {
       status: 200,
       headers: {
         "Content-Type": "audio/mpeg",
         "X-Yatra-Provider": "google-tts",
+        "X-Yatra-Cache": "miss",
         ...corsHeaders(origin),
       },
     });
