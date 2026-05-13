@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.4] - 2026-05-13 — Reels layout cleanup + Export bulletproof
+
+### Fixed
+- **Reels orbit / bird's-eye out of sync** with traversed path. The manual-mode auto-recenter (v1.5.2) eased the camera back to the marker every 800ms, fighting non-default camera modes. Now gated on `cameraMode === "default"` — bird/chase/orbit own the framing without interference.
+- **Reels basemap + camera-mode pills overlapped** on narrow viewports. Restructured into a single top control strip: basemap + camera-mode pill groups in a row at top-left, wrapping when narrow. Pause/recenter live in a separate top-right toolbar.
+- **Atlas Export menu still hidden behind buttons.** v1.5.3 used absolute positioning (relative to `.atlas-export`) which sometimes failed depending on stacking context. Switched to fixed positioning (`bottom: 16px; left: 192px; z-index: 999`) with an opaque `#0d1a26` background — floats above everything regardless of parent z-index.
+
 ## [1.5.3] - 2026-05-13 — QA pass on v1.5.2
 
 ### Fixed

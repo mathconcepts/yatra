@@ -1332,21 +1332,20 @@ body {
 }
 .atlas-export .jm-surface-toggle { width: 100%; text-align: center; }
 .atlas-export-menu {
-  position: absolute;
-  left: 100%;
-  bottom: 0;
-  margin-left: 8px;
+  position: fixed;
+  bottom: 16px;
+  left: 192px;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  background: rgba(13, 26, 38, 0.98);
+  background: #0d1a26;
   backdrop-filter: blur(10px);
-  padding: 8px;
+  padding: 10px;
   border-radius: 8px;
-  border: 1px solid rgba(244, 232, 208, 0.12);
-  min-width: 160px;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
-  z-index: 200;
+  border: 1px solid rgba(244, 232, 208, 0.2);
+  min-width: 180px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
+  z-index: 999;
 }
 .atlas-export-menu button {
   padding: 8px 12px;
@@ -1430,3 +1429,61 @@ body {
   flex: 1;
   min-height: 0;
 }
+
+/* Reels top control strip (v1.5.4 layout cleanup) */
+.reel-toolbar {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  z-index: 6;
+}
+.reel-toolbar-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: rgba(20, 20, 24, 0.78);
+  backdrop-filter: blur(8px);
+  color: #f4ede1;
+  border: 1px solid rgba(244, 237, 225, 0.18);
+  font-size: 16px;
+  cursor: pointer;
+}
+.reel-toolbar-btn:hover { background: rgba(138, 69, 40, 0.9); }
+
+.reel-control-strip {
+  position: absolute;
+  top: 60px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  z-index: 6;
+}
+.reel-control-group {
+  display: flex;
+  gap: 2px;
+  background: rgba(20, 20, 24, 0.78);
+  backdrop-filter: blur(8px);
+  padding: 3px;
+  border-radius: 999px;
+}
+.reel-control-btn {
+  padding: 5px 10px;
+  font-family: "Manrope", system-ui, sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(244, 237, 225, 0.7);
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.reel-control-btn.active { background: #8a4528; color: #f4ede1; }
+.reel-control-btn-cam.active { background: #1a6635; }
+.reel-control-btn:hover:not(.active) { color: #f4ede1; }
