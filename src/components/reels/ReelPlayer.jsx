@@ -46,6 +46,7 @@ export default function ReelPlayer({ config }) {
   const [playing, setPlaying] = useState(true);
   const [interactionMode, setInteractionMode] = useState("auto");
   const [manualKey, setManualKey] = useState(0);
+  const [basemap, setBasemap] = useState(config.topography?.basemap || "topo");
 
   useEffect(() => { playingRef.current = playing; }, [playing]);
   useEffect(() => { interactionModeRef.current = interactionMode; }, [interactionMode]);
@@ -73,6 +74,22 @@ export default function ReelPlayer({ config }) {
       enterManual();
     }
   }, [enterManual]);
+
+  // Recenter on the live marker without flipping out of manual mode —
+  // the user panned away and lost the journey but may still want to
+  // control the camera manually.
+  const recenter = useCallback(() => {
+    const map = mapRef.current;
+    if (!map || !route) return;
+    const pos = interpolateRoute(route.waypoints, progressRef.current);
+    if (!pos) return;
+    map.easeTo({
+      center: [pos.lon, pos.lat],
+      zoom: config.topography?.zoom ?? 12,
+      pitch: config.topography?.pitch ?? 45,
+      duration: 600,
+    });
+  }, [route, config.topography]);
 
   // Camera + marker rAF loop. Mounts once; reads refs.
   useEffect(() => {
@@ -172,7 +189,7 @@ export default function ReelPlayer({ config }) {
       <div className="reel-map">
         <MapView
           config={config}
-          basemap={config.topography?.basemap || "topo"}
+          basemap={basemap}
           activeRouteId={route?.id}
           currentPos={currentPos}
           isJourneyActive={playing}
@@ -195,6 +212,35 @@ export default function ReelPlayer({ config }) {
         manualKey={manualKey}
         onToggle={togglePill}
       />
+
+      <div className="reel-basemap" role="group" aria-label="Basemap">
+        {[
+          ["topo", "Topo"],
+          ["imagery", "Imagery"],
+          ["relief", "Relief"],
+        ].map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            className={`reel-basemap-btn${basemap === id ? " active" : ""}`}
+            onClick={() => setBasemap(id)}
+            aria-pressed={basemap === id}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {interactionMode === "manual" && (
+        <button
+          type="button"
+          className="reel-recenter"
+          onClick={recenter}
+          aria-label="Recenter on current journey position"
+        >
+          ⊙ Recenter
+        </button>
+      )}
 
       {activeLandmark && (
         <div className="reel-postcard" role="region" aria-label="Landmark postcard">
