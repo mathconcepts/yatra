@@ -12,6 +12,10 @@
  * auth later" mistake. See SECURITY.md for the enforcement checklist.
  */
 import { validateScriptRequest, problem } from "../schemas.js";
+import { callClaude } from "../claudeClient.js";
+import { SYSTEM_PROMPTS } from "./prompts.js";
+
+const TOTAL_DURATION_S = 30;
 
 const CORS_ALLOWLIST = [
   "http://localhost:5173",
@@ -89,34 +93,78 @@ async function handleScript(request, env, origin) {
   // TODO(idempotency): compute cacheKey = sha256(routeId + tone + language)
   // and look up R2 before calling Claude. On hit, set X-Yatra-Cache: hit.
 
-  // STUB: echo a one-scene placeholder so the client can render end-to-end.
-  // Real implementation calls Anthropic Claude Haiku with the curated
-  // prompt under prompts/<tone>.md, parses the structured scene list, and
-  // returns it. The MOCK_MODE path in the client returns hand-authored
-  // fixtures; this echo is just to prove the network shape works.
-  const response = {
-    routeId: body.routeId,
-    tone: body.tone,
-    language: body.language,
-    scenes: [
-      {
-        id: "origin",
-        tStart: 0,
-        tEnd: 30,
-        narration: `[worker-stub] ${body.routeTitle} (${body.tone}, ${body.language})`,
-        captionText: body.routeTitle,
-        captionStyle: "headline",
+  const systemPrompt = SYSTEM_PROMPTS[body.tone];
+  if (!systemPrompt) {
+    return jsonResponse(
+      400,
+      problem({
+        slug: "invalid-request",
+        title: "Tone has no prompt yet",
+        status: 400,
+        detail: `Tone "${body.tone}" is valid but no prompt template exists yet. Devotional is currently the only wired tone.`,
+        fix: "Pick devotional, or land a prompt template in workers/yatra-director/src/prompts.js.",
+        requestId: id,
+      }),
+      origin,
+    );
+  }
+
+  // If the API key is not provisioned (dev environments, first-deploy
+  // verification), fall back to a stub echo so the network path still
+  // works end-to-end. SECURITY.md requires the key be present before
+  // any public deploy.
+  if (!env?.ANTHROPIC_API_KEY) {
+    const response = {
+      routeId: body.routeId,
+      tone: body.tone,
+      language: body.language,
+      scenes: [
+        {
+          id: "origin",
+          tStart: 0,
+          tEnd: TOTAL_DURATION_S,
+          narration: `[worker-stub] ${body.routeTitle} (${body.tone}, ${body.language})`,
+          captionText: body.routeTitle,
+          captionStyle: "headline",
+        },
+      ],
+      meta: {
+        scriptModel: "stub-no-key",
+        totalDurationS: TOTAL_DURATION_S,
+        wordCount: 0,
+        generatedAt: new Date().toISOString(),
+        note: "ANTHROPIC_API_KEY not set. wrangler secret put ANTHROPIC_API_KEY to enable real generation.",
       },
-    ],
-    meta: {
-      scriptModel: "stub-echo",
-      totalDurationS: 30,
-      wordCount: 0,
-      generatedAt: new Date().toISOString(),
-      note: "Worker is in stub mode. See workers/yatra-director/README.md to wire Claude.",
-    },
-  };
-  return jsonResponse(200, response, origin);
+    };
+    return jsonResponse(200, response, origin);
+  }
+
+  try {
+    const result = await callClaude({
+      apiKey: env.ANTHROPIC_API_KEY,
+      systemPrompt,
+      body,
+      totalDurationS: TOTAL_DURATION_S,
+    });
+    return jsonResponse(200, result, origin);
+  } catch (err) {
+    const code = err?.code || "parse";
+    const statusByCode = { auth: 502, timeout: 504, rate: 503, parse: 502 };
+    const status = statusByCode[code] || 502;
+    return jsonResponse(
+      status,
+      problem({
+        slug: "upstream-claude",
+        title: "Upstream Claude error",
+        status,
+        detail: err?.message || String(err),
+        cause: `claudeClient code=${code}`,
+        fix: "Check Worker logs for requestId. If repeated, rotate ANTHROPIC_API_KEY and check Anthropic status.",
+        requestId: id,
+      }),
+      origin,
+    );
+  }
 }
 
 export default {

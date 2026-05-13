@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.4] - 2026-05-13 — AI Cinematographer Step 4: Worker calls real Claude
+
+`/v1/script` now calls Anthropic Claude Haiku 4.5 with the curated Devotional system prompt
+when `ANTHROPIC_API_KEY` is provisioned via `wrangler secret put`. When the key is absent
+(dev or first-deploy verification), the Worker falls back to the stub-echo shape so the
+network path still works end-to-end without coupling deploys to key provisioning.
+
+### Added
+- **`workers/yatra-director/claudeClient.js`** — pure parts (`extractSystemPrompt`, `buildUserPrompt`, `parseClaudeResponse`) plus the thin `callClaude` fetch wrapper. 15-second timeout with AbortController. Errors carry a `code` field (`auth | rate | timeout | parse`) so the Worker maps them onto RFC-7807 status codes (502/503/504).
+- **`workers/yatra-director/prompts/devotional.md`** — human-editable source-of-truth for the Devotional system prompt. Includes religious-safety constraints from the autoplan CEO review ("never invent deity attribution, never invent Vaishnava/Shaiva conflations beyond curated facts").
+- **`workers/yatra-director/src/prompts.js`** — JS-bundle mirror of the .md prompts. Sync-by-hand for now; future `scripts/sync-prompts.mjs` automates it.
+- Worker `handleScript`: validates tone has a wired prompt, calls Claude when key present, falls back to stub when not. Errors from `callClaude` map to upstream-claude RFC-7807 problem responses with appropriate status codes.
+
+### Tests
+- 23 new tests in `test/claude-client.test.js`: prompt extraction, user-prompt assembly (peak moment formatting, curated-facts safety messaging, empty-landmarks handling), response parsing (JSON, fenced JSON, schema validation, error paths), `callClaude` integration (auth/rate/timeout/parse error mapping, multi-block text joining). Total: 422/422.
+
+### Deploy gate (unchanged)
+Worker still NOT deploy-ready. `SECURITY.md` checklist (Turnstile, rate-limit DO, KV daily ceiling, R2 cache, kill switch) is the gate. The Claude integration is wired but unguarded.
+
 ## [1.6.3] - 2026-05-13 — AI Cinematographer Step 3: audio mixer (OfflineAudioContext-ready)
 
 The directorAudio.js mixer per the autoplan eng review's call: all math in Float32Array
