@@ -1,7 +1,9 @@
 export default function Header({
   config, basemap, onBasemapChange,
   activeRouteId, onRouteChange,
+  compareRoutes = false, onToggleCompareRoutes,
 }) {
+  const hasMultipleRoutes = config.routes.length > 1;
   return (
     <div className="jm-header">
       <div>
@@ -31,13 +33,24 @@ export default function Header({
           {config.routes.map((r) => (
             <button
               key={r.id}
-              className={"jm-tab " + (r.id === activeRouteId ? "active" : "")}
+              className={"jm-tab " + (!compareRoutes && r.id === activeRouteId ? "active" : "")}
               onClick={() => onRouteChange(r.id)}
-              style={r.id === activeRouteId ? { boxShadow: `inset 0 -2px 0 ${r.color}` } : null}
+              disabled={compareRoutes}
+              style={!compareRoutes && r.id === activeRouteId ? { boxShadow: `inset 0 -2px 0 ${r.color}` } : null}
             >
               {r.name}
             </button>
           ))}
+          {hasMultipleRoutes && (
+            <button
+              type="button"
+              className={"jm-tab " + (compareRoutes ? "active" : "")}
+              onClick={() => onToggleCompareRoutes?.()}
+              title="Show all routes side by side"
+            >
+              Compare all
+            </button>
+          )}
         </div>
       </div>
     </div>

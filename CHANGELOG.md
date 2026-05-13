@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.0] - 2026-05-13 — Compare + universal export (v3.4 Waves B + C, lean cut)
+
+### Added
+- `?surface=compare` — pick any two journeys (curated or saved memories) from dropdowns; both routes render simultaneously in saffron + sky, both markers play against a shared progress, side panel shows live distance / elevation / waypoint / landmark deltas. New `Compare` button in the Atlas toggle bar.
+- Atlas **Compare all routes** tab — for any config with multiple routes (Tirupati's Alipiri + Srivari mettu), renders all routes at full weight simultaneously instead of one active + others faded.
+- Universal export router `src/services/exportRouter.js` — `exportArtifact({format, aspect, canvas, config})` routes to PNG (canvas.toBlob snapshot) or MP4 at 9:16 / 1:1 / 16:9. Reuses the offscreen ReelRenderer + mp4Export pipeline. PNG fast-path snapshots the live MapLibre canvas with no re-render.
+- Atlas **Export** dropdown — snapshot PNG of current view, or render MP4 at any of 3 aspects.
+- Tests: 306/306 (+17 — compareJourneys ✕6, exportRouter ✕11).
+
+### Deferred (tracked in TODOS.md)
+- **P4 split-screen vertical reels** — needs `?surface=split` route; v3.4 ships the wide-Atlas compare instead.
+- **Animated GIF export** — needs gif.js dep (~30KB); MP4 ships first.
+
+### Fixed (drive-by)
+- Removed a duplicate `surface === "memories"` branch in `SurfaceRouter.jsx` left over from a prior rebase.
+
 ## [1.4.0] - 2026-05-13 — Cadence wave (v3.3)
 
 The "right view at the right moment" wave from the v3.3 CEO brainstorm.

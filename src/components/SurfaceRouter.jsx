@@ -7,9 +7,10 @@ import { readMemoryFromUrl } from "../services/shareLink";
 const Reels = lazy(() => import("./reels/ReelFeed.jsx"));
 const Composer = lazy(() => import("./composer/MemoryComposer.jsx"));
 const Memories = lazy(() => import("./memories/MemoryGallery.jsx"));
+const Compare = lazy(() => import("./compare/CompareView.jsx"));
 
 const STORAGE_KEY = "yatra.surface";
-const VALID_SURFACES = ["atlas", "reels", "composer", "memories"];
+const VALID_SURFACES = ["atlas", "reels", "composer", "memories", "compare"];
 
 /**
  * Pure decision: pick the right surface for a viewport.
@@ -122,13 +123,10 @@ export default function SurfaceRouter({ atlas, locationId, locations }) {
     );
   }
 
-  if (surface === "memories") {
+  if (surface === "compare") {
     return (
       <Suspense fallback={<div className="jm-loading" role="status">Loading…</div>}>
-        <Memories
-          onCancel={() => switchSurface("atlas")}
-          onOpen={(cfg) => { setMemoryOverride(cfg); switchSurface("reels"); }}
-        />
+        <Compare locations={locations} onCancel={() => switchSurface("atlas")} />
       </Suspense>
     );
   }
@@ -170,6 +168,14 @@ export default function SurfaceRouter({ atlas, locationId, locations }) {
           aria-label="View saved memories"
         >
           My memories
+        </button>
+        <button
+          type="button"
+          className="jm-surface-toggle"
+          onClick={() => switchSurface("compare")}
+          aria-label="Compare two journeys"
+        >
+          Compare
         </button>
         <button
           type="button"
