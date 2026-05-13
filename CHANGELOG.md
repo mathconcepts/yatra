@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.5] - 2026-05-13 — AI Cinematographer Step 5: exportPostcard (the WhatsApp preview artifact)
+
+The most-shareable artifact per byte. Stills survive WhatsApp compression where MP4s get
+crushed; OG preview thumbnails carry 80% of the in-feed storytelling before anyone taps
+play. The postcard render is also the canonical first frame of every Director MP4, so the
+same function works as standalone PNG export and as a video frame.
+
+### Added
+- **`src/services/exportPostcard.js`** with three pure helpers plus an orchestrator:
+  - `formatStatsLine({distanceKm, durationHr, elevGainM, language})` — localized stats. Distance/duration formatting is locale-aware; unit suffixes translate (km → కిమీ / किमी / கி.மீ). Digits stay Latin for cross-script feed legibility.
+  - `layoutPostcard({width, height, palette})` — region rectangles for hero (55%), title (18%), subtitle (12%), ornament (15%). Insets scale proportionally to canvas height.
+  - `drawPostcard(ctx, {sourceFrame, palette, language, title, statsLine})` — paints parchment background, draws hero (source frame or palette gradient placeholder), typesets title with `fontForLanguage`, draws subtitle stats, draws ornament rule + accent label.
+  - `exportPostcard({sourceCanvas, config, palette, language})` — orchestrator that creates a 9:16 canvas (720×1280 default), renders, returns blob URL. Production wires real `document.createElement('canvas')`, `canvas.toBlob`, `URL.createObjectURL`; tests inject fakes.
+
+### Tests
+- 22 new tests in `test/export-postcard.test.js`: stats formatting (4 languages, edge cases, fallbacks), layout regions (no overlap, proportional scaling, input validation), drawing (background, hero, title font selection per language, gradient placeholder fallback, ornament), end-to-end orchestrator (blob URL, climb computation from origin/destination, source-canvas passthrough, encode failure). Total: 444/444.
+
+### Not yet
+- `exportPostcard` is not yet wired into `exportRouter.exportArtifact` or `DirectorView`'s download button. That single-line glue commit waits until DirectorView has a render to share.
+- The mandala SVG ornament referenced in `devotional.js` (`palette.ornament.asset`) is not yet shipped; the postcard currently uses a saffron rule + label. SVG ornament lands when the visual design is locked.
+
 ## [1.6.4] - 2026-05-13 — AI Cinematographer Step 4: Worker calls real Claude
 
 `/v1/script` now calls Anthropic Claude Haiku 4.5 with the curated Devotional system prompt
