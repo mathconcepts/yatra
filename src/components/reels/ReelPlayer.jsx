@@ -38,6 +38,7 @@ export default function ReelPlayer({ config }) {
   const rafIdRef = useRef(null);
   const interactionModeRef = useRef("auto");
   const manualTimerRef = useRef(null);
+  const lastOffscreenCheckRef = useRef(0);
 
   // React state on the cool path: tick (throttled UI), play (button label),
   // interactionMode (pill label), manualKey (restarts the pill's CSS countdown).
@@ -47,6 +48,7 @@ export default function ReelPlayer({ config }) {
   const [interactionMode, setInteractionMode] = useState("auto");
   const [manualKey, setManualKey] = useState(0);
   const [basemap, setBasemap] = useState(config.topography?.basemap || "topo");
+  const [postcardOpen, setPostcardOpen] = useState(true);
 
   useEffect(() => { playingRef.current = playing; }, [playing]);
   useEffect(() => { interactionModeRef.current = interactionMode; }, [interactionMode]);
@@ -125,6 +127,21 @@ export default function ReelPlayer({ config }) {
               pitch: cam.pitch,
               bearing: cam.bearing,
             });
+          }
+        }
+      } else if (now - lastOffscreenCheckRef.current > 800) {
+        // Manual mode: every ~800ms, if the marker has drifted outside
+        // the visible viewport, ease it back into view without flipping
+        // mode. The throttle prevents fighting an in-progress easeTo.
+        lastOffscreenCheckRef.current = now;
+        const map = mapRef.current;
+        if (map && map.getBounds) {
+          const pos = interpolateRoute(wps, t);
+          if (pos) {
+            const b = map.getBounds();
+            if (!b.contains([pos.lon, pos.lat])) {
+              map.easeTo({ center: [pos.lon, pos.lat], duration: 500 });
+            }
           }
         }
       }
@@ -243,13 +260,29 @@ export default function ReelPlayer({ config }) {
       )}
 
       {activeLandmark && (
-        <div className="reel-postcard" role="region" aria-label="Landmark postcard">
-          <div className="reel-postcard-name">{activeLandmark.name}</div>
-          <p className="reel-postcard-body">
-            {polishedBlurb(config.id, activeLandmark.id) || activeLandmark.blurb}
-          </p>
-          {activeLandmark.ritual && (
-            <div className="reel-postcard-ritual">{activeLandmark.ritual}</div>
+        <div
+          className={`reel-postcard${postcardOpen ? " open" : " collapsed"}`}
+          role="region"
+          aria-label="Landmark postcard"
+        >
+          <button
+            type="button"
+            className="reel-postcard-name"
+            onClick={() => setPostcardOpen((o) => !o)}
+            aria-expanded={postcardOpen}
+          >
+            <span>{activeLandmark.name}</span>
+            <span className="reel-postcard-chevron" aria-hidden="true">{postcardOpen ? "▾" : "▸"}</span>
+          </button>
+          {postcardOpen && (
+            <>
+              <p className="reel-postcard-body">
+                {polishedBlurb(config.id, activeLandmark.id) || activeLandmark.blurb}
+              </p>
+              {activeLandmark.ritual && (
+                <div className="reel-postcard-ritual">{activeLandmark.ritual}</div>
+              )}
+            </>
           )}
         </div>
       )}

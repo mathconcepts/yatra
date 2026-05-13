@@ -444,14 +444,18 @@ body {
   position: absolute;
   left: 18px; right: 18px;
   bottom: 110px;
-  background: rgba(255, 250, 240, 0.96);
-  border: 1px solid rgba(201, 187, 163, 0.7);
+  background: rgba(255, 250, 240, 0.78);
+  border: 1px solid rgba(201, 187, 163, 0.6);
   border-radius: 14px;
-  padding: 14px 16px 12px;
+  padding: 12px 14px 10px;
   color: #1c1814;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.32);
   animation: reel-postcard-in 0.4s ease-out both;
+  backdrop-filter: blur(6px);
+  transition: padding 0.18s ease;
 }
+.reel-postcard.collapsed { padding: 6px 14px; }
+.reel-postcard.open:hover, .reel-postcard.open:focus-within { background: rgba(255, 250, 240, 0.96); }
 @keyframes reel-postcard-in {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -459,9 +463,25 @@ body {
 .reel-postcard-name {
   font-family: "Cormorant Garamond", serif;
   font-weight: 600;
-  font-size: 20px;
+  font-size: 18px;
   line-height: 1.1;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
+  background: none;
+  border: 0;
+  color: inherit;
+  padding: 0;
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  font-family: "Cormorant Garamond", serif;
+  text-align: left;
+}
+.reel-postcard-chevron {
+  font-size: 12px;
+  color: rgba(28, 24, 20, 0.5);
+  margin-left: 8px;
 }
 .reel-postcard-body {
   font-family: "Cormorant Garamond", serif;
