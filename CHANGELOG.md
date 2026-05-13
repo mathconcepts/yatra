@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.0] - 2026-05-13 — AI Cinematographer Step 1: Director scaffold + tone palettes + Worker contract
+
+First commit of the AI Cinematographer per the office-hours design doc at
+`~/.gstack/projects/mathconcepts-yatra/root-claude-install-gstack-RXXAr-design-20260513-133915.md`.
+Reviewed via `/autoplan` (CEO + Design + Eng + DX subagents); user accepted B-straight
+direction and the auto-decided security baseline.
+
+### Added
+- **`src/services/tonePalettes/`** — the taste layer. `schema.js` validator loud-fails on missing fields. `devotional.js` ships concrete values: saffron `#8a4528` + parchment `#f4ede1` baseline; Indic font stack (Tiro Devanagari Hindi / Mandali Telugu / Catamaran Tamil) — Cormorant Garamond has zero Indic glyph coverage so it's no longer the fallback for Indic text. 4x4 color-matrix LUT, per-line burned-in captions (Instagram autoplays muted; sound-off viewers cannot otherwise see narration). Explorer / Poetic / Historical inherit Devotional's shape as stubs.
+- **`src/services/directorScript.js`** — script generator with `VITE_DIRECTOR_MOCK=1` mode. Returns a hand-authored Telugu Devotional Yadagiri fixture so contributors can render end-to-end without any API key. Live mode posts to the Cloudflare Worker's `/v1/script`. Reuses `detectPeakMoments` so scenes ARE peak moments.
+- **`src/components/director/DirectorView.jsx`** — new `?surface=director` route. Tone picker first (4 palettes), then route, then language chips (en/hi/te/ta, defaults to device locale). One "Direct this journey" button. v0 renders the returned scenes as a text list; TTS + audio mixing + map render + MP4 mux land in later commits.
+- **`workers/yatra-director/`** — Cloudflare Worker scaffold with `API.md` (versioned `/v1/script`, RFC-7807 error shape, Turnstile + rate-limit + idempotency contract), `SECURITY.md` (pre-deploy checklist, rotation cadence, leak playbook, ~$0.72 multilingual-render cost analysis with the $7,200-scraper-loop risk made explicit), shared `schemas.js` imported by both Worker and client, stub `src/index.js` that echoes a one-scene placeholder so the network path is exercised before Claude is wired in. Worker is NOT deploy-ready — auto-decided security controls (Turnstile, Durable Object rate-limit, KV daily ceiling, kill switch, R2 cache) exist as TODO markers gated by the SECURITY.md checklist.
+- **`src/components/director/README.md`** — single-file pipeline overview; the year-from-now-start-here doc.
+- **`src/fixtures/directorScript.yadagiri.devotional.te.json`** — hand-authored Telugu narration for Yadagiri, 5 scenes / 30s.
+
+### Changed
+- `SurfaceRouter.jsx` adds `director` to `VALID_SURFACES`, lazy-loads `DirectorView`, and wires a toggle button. Full registry refactor (recommended by the DX reviewer) deferred to a follow-up commit to keep this diff scoped.
+- `package.json` → 1.6.0.
+
+### Auto-decided baseline (locked, even though not yet enforced in stub)
+1. Worker security: Turnstile + signed token + per-IP DO rate-limit + KV daily ceiling + R2 idempotency cache + env kill switch. Documented in `SECURITY.md` as the deploy gate.
+2. Color LUT applies per-frame in `colorGrade.js` (planned), NOT via raster basemap variants — `preserveDrawingBuffer` captures the WebGL framebuffer, not styled DOM, so CSS filters would not land in the MP4.
+3. Audio mixing path = `OfflineAudioContext` → single `AudioBuffer` → existing `encodeAacFromBuffer`. LUFS language dropped (Web Audio has no LUFS meter); target peak/RMS dBFS.
+4. `VITE_DIRECTOR_MOCK=1` + `window.speechSynthesis` fallback so the feature is testable without any API key.
+5. Per-line burned-in captions (not scene-boundary) — Instagram autoplay-muted is the dominant feed reality.
+
 ## [1.5.4] - 2026-05-13 — Reels layout cleanup + Export bulletproof
 
 ### Fixed

@@ -1,0 +1,32 @@
+# Copy to wrangler.toml and fill in account_id before running `wrangler dev`.
+# wrangler.toml itself is gitignored; secrets go via `wrangler secret put`.
+
+name = "yatra-director"
+main = "src/index.js"
+compatibility_date = "2026-05-13"
+
+# account_id = "YOUR_CLOUDFLARE_ACCOUNT_ID"
+
+# Bindings to provision before going live. Names are referenced by src/index.js.
+# Uncomment after creating each resource.
+
+# [[kv_namespaces]]
+# binding = "BUDGET_KV"
+# id = "YOUR_BUDGET_KV_ID"
+
+# [[r2_buckets]]
+# binding = "SCRIPT_CACHE"
+# bucket_name = "yatra-director-script-cache"
+
+# [[durable_objects.bindings]]
+# name = "RATE_LIMITER"
+# class_name = "RateLimiter"
+
+# [vars]
+# DIRECTOR_KILLSWITCH = "0"
+
+# Secrets (set via `wrangler secret put <NAME>`, never put in this file):
+#   ANTHROPIC_API_KEY
+#   TURNSTILE_SECRET_KEY
+#   ELEVENLABS_API_KEY  (optional, for /v1/tts)
+#   OPENAI_API_KEY      (optional, for /v1/tts fallback)
