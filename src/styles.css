@@ -1619,3 +1619,31 @@ body {
   color: rgba(244, 237, 225, 0.5);
   font-style: italic;
 }
+
+/* ─── Director v1.6.7 result UI ──────────────────────────────────────── */
+.director-result { margin-top: 24px; }
+.director-downloads {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.director-download {
+  display: block;
+  padding: 14px 16px;
+  border: 1px solid rgba(244, 237, 225, 0.25);
+  border-radius: 10px;
+  background: rgba(244, 237, 225, 0.06);
+  color: #f4ede1;
+  text-decoration: none;
+  font-size: 15px;
+  font-weight: 500;
+}
+.director-download:hover { background: rgba(244, 237, 225, 0.12); }
+.director-scenes-toggle summary {
+  cursor: pointer;
+  color: rgba(244, 237, 225, 0.7);
+  font-size: 14px;
+  padding: 6px 0;
+}
+.director-scenes-toggle ol { list-style: none; padding: 0; margin: 12px 0 0; }

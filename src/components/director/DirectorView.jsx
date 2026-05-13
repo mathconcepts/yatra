@@ -1,22 +1,18 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { PALETTE_IDS, getPalette, SUPPORTED_LANGUAGES } from "../../services/tonePalettes/index.js";
-import { generateScript } from "../../services/directorScript.js";
+import { runDirectorPipeline } from "../../services/directorPipeline.js";
 
 /**
- * AI Cinematographer surface (v0 scaffold).
+ * AI Cinematographer surface.
  *
- * Step 1 of the design doc: tone picker, route picker (curated configs),
- * language picker, "Direct this journey" button. On click, calls
- * generateScript and renders the returned scenes as text. No TTS, no
- * audio mixing, no map render here yet — those land in later commits.
+ * Pipeline wired in v1.6.7: tone + route + language → directorPipeline →
+ * MP4 (silent for now) + postcard. The "Direct this journey" button runs
+ * the full script → TTS (silent default) → mix → render → encode →
+ * postcard chain and surfaces download links.
  *
- * The point of v0 is to prove the script generator + MOCK fixture path
- * end-to-end before any API key is provisioned.
- *
- * Per the design doc + autoplan review: route default is the user's
- * last journey if available, language defaults to device locale (mapped
- * to one of SUPPORTED_LANGUAGES), tone is the one decision the user
- * makes first.
+ * Audio in the MP4 is deferred to v1.6.8 (small encodeMp4 surface
+ * change to accept AudioBuffer directly). Today: silent video + cover
+ * postcard ready to share.
  */
 
 function defaultLanguage() {
@@ -33,26 +29,83 @@ export default function DirectorView({ locations = {}, onCancel }) {
   const [tone, setTone] = useState("devotional");
   const [language, setLanguage] = useState(defaultLanguage);
   const [routeId, setRouteId] = useState(routeChoices[0]?.id || "");
-  const [stage, setStage] = useState("idle"); // idle | composing | rendering | done | error
-  const [scenes, setScenes] = useState(null);
+  const [stage, setStage] = useState("idle"); // idle | running | done | error
+  const [progressMsg, setProgressMsg] = useState("");
+  const [progressDetail, setProgressDetail] = useState("");
+  const [result, setResult] = useState(null);
   const [errorMsg, setErrorMsg] = useState("");
+  const abortRef = useRef(null);
 
   const palette = getPalette(tone);
   const route = routeChoices.find((r) => r.id === routeId)?.cfg;
 
+  const STAGE_LABELS = {
+    script: "Composing the script",
+    tts: "Recording the voice",
+    audio: "Mixing the score",
+    render: "Color-grading the map",
+    encode: "Cutting the film",
+    postcard: "Printing the postcard",
+    done: "Done",
+  };
+
   async function onDirect() {
     if (!route) return;
-    setStage("composing");
-    setScenes(null);
+    setStage("running");
+    setResult(null);
     setErrorMsg("");
+    setProgressMsg(STAGE_LABELS.script);
+    setProgressDetail("");
+    abortRef.current = new AbortController();
+
     try {
-      const result = await generateScript({ config: route, tone, language });
-      setScenes(result.scenes || []);
+      // Lazy-load the heavy renderer + encoder so first paint of the
+      // Director screen stays fast.
+      const [{ createOffscreenReelRenderer }, { encodeMp4 }] = await Promise.all([
+        import("../../services/reelRenderer.js"),
+        import("../../services/mp4Export.js"),
+      ]);
+
+      // Provide an OfflineAudioContext-backed createBuffer when the host
+      // supports it. The pipeline doesn't crash without it; the audio
+      // mixer's output just isn't materialized.
+      let createAudioBuffer;
+      try {
+        if (typeof OfflineAudioContext !== "undefined") {
+          createAudioBuffer = (n, len, sr) => new OfflineAudioContext(n, len, sr).createBuffer(n, len, sr);
+        }
+      } catch { /* not available — proceed without */ }
+
+      const out = await runDirectorPipeline({
+        config: route,
+        palette,
+        language,
+        signal: abortRef.current.signal,
+        makeRenderer: createOffscreenReelRenderer,
+        encodeMp4Impl: encodeMp4,
+        createAudioBuffer,
+        onProgress: ({ stage: s, frame, total, message }) => {
+          if (message) setProgressMsg(message);
+          else if (STAGE_LABELS[s]) setProgressMsg(STAGE_LABELS[s]);
+          if (typeof frame === "number" && typeof total === "number") {
+            setProgressDetail(`${frame} / ${total}`);
+          } else {
+            setProgressDetail("");
+          }
+        },
+      });
+      setResult(out);
       setStage("done");
     } catch (err) {
       setErrorMsg(err?.message || String(err));
       setStage("error");
+    } finally {
+      abortRef.current = null;
     }
+  }
+
+  function onCancelRun() {
+    abortRef.current?.abort();
   }
 
   return (
@@ -114,36 +167,44 @@ export default function DirectorView({ locations = {}, onCancel }) {
       <button
         type="button"
         className="director-cta"
-        onClick={onDirect}
-        disabled={!route || stage === "composing"}
+        onClick={stage === "running" ? onCancelRun : onDirect}
+        disabled={!route}
         style={{ background: palette.color.primary }}
       >
-        {stage === "composing" ? "Composing the script…" : "Direct this journey"}
+        {stage === "running" ? `${progressMsg || "Working"}${progressDetail ? ` · ${progressDetail}` : ""} (cancel)` : "Direct this journey"}
       </button>
 
       {stage === "error" && (
         <div className="director-error" role="alert">
-          <strong>Couldn't compose:</strong> {errorMsg}
+          <strong>Couldn't direct:</strong> {errorMsg}
         </div>
       )}
 
-      {stage === "done" && scenes && (
-        <section className="director-scenes" aria-label="Scenes">
-          <h2>Scenes ({scenes.length})</h2>
-          <ol>
-            {scenes.map((s) => (
-              <li key={s.id} className="director-scene">
-                <span className="director-scene-t">
-                  {s.tStart.toFixed(1)}–{s.tEnd.toFixed(1)}s
-                </span>
-                <span className="director-scene-narration">{s.narration}</span>
-                <span className="director-scene-caption">{s.captionText}</span>
-              </li>
-            ))}
-          </ol>
+      {stage === "done" && result && (
+        <section className="director-result" aria-label="Result">
+          <div className="director-downloads">
+            <a className="director-download" href={result.mp4Url} download={`${route.id}-${tone}-${language}.mp4`}>
+              ⬇ MP4 ({result.frameCount} frames · {result.durationS.toFixed(0)}s)
+            </a>
+            <a className="director-download" href={result.postcardUrl} download={`${route.id}-${tone}-${language}-postcard.png`}>
+              ⬇ Postcard PNG
+            </a>
+          </div>
           <p className="director-note">
-            v0 scaffold — TTS, audio mixing, color-graded map render, and MP4 mux land in later commits.
+            v1.6.7 ships silent MP4 + postcard cover. Audio mixer ran in <code>{result.mode}</code> mode; embedding into MP4 lands in v1.6.8 after TTS quality validation.
           </p>
+          <details className="director-scenes-toggle">
+            <summary>Scenes ({result.scenes.length})</summary>
+            <ol className="director-scenes">
+              {result.scenes.map((s) => (
+                <li key={s.id} className="director-scene">
+                  <span className="director-scene-t">{s.tStart.toFixed(1)}–{s.tEnd.toFixed(1)}s</span>
+                  <span className="director-scene-narration">{s.narration}</span>
+                  <span className="director-scene-caption">{s.captionText}</span>
+                </li>
+              ))}
+            </ol>
+          </details>
         </section>
       )}
     </div>

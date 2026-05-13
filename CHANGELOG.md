@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.7] - 2026-05-13 — AI Cinematographer Step 7: end-to-end pipeline (DirectorView ships a real MP4)
+
+The glue commit. DirectorView's "Direct this journey" button now runs the full chain:
+script → TTS → audio mix → director-mode renderer → MP4 encode → postcard cover. Click,
+wait ~30 seconds, get a downloadable MP4 + downloadable postcard PNG.
+
+### Added
+- **`src/services/directorPipeline.js`**:
+  - `framePlanForDuration(durationS, fps)` — pure frame-count math.
+  - `scenesToAudioTiming(scenes)` — pure scene-starts + total-duration extractor.
+  - `runDirectorPipeline({config, palette, language, ...})` — orchestrator. Calls `generateScript` → `synthesizeScenes` → `mixDirectorAudio` → `createOffscreenReelRenderer({directorMode})` → `encodeMp4` → `exportPostcard`. Returns `{mp4Url, postcardUrl, scenes, mode, audioBuffer, frameCount, durationS}`. Emits per-stage progress events. Every dependency is injected; the production caller in DirectorView wires real modules, tests inject fakes.
+
+### Changed
+- **`src/components/director/DirectorView.jsx`** — now runs the full pipeline on click. New result UI: download links for MP4 and postcard PNG, collapsed scene list under a `<details>`, real progress messages per stage ("Composing the script", "Recording the voice", "Color-grading the map", "Cutting the film", "Printing the postcard"). Cancel button replaces the CTA mid-run via `AbortController`. Lazy-loads `reelRenderer` + `mp4Export` so first paint stays fast.
+- `OfflineAudioContext` wired in as the production `createAudioBuffer` factory when the host supports it; pipeline degrades cleanly without it.
+
+### Tests
+- 14 new tests in `test/director-pipeline.test.js`: frame-plan math, scene-timing extraction, full orchestrator walk with progress events captured, directorMode payload passed to renderer, first-frame-as-postcard-hero passthrough, abort mid-render, input validation, missing-dep rejection, empty-script handling, no-audio-buffer fallback. Total: 484/484.
+
+### What's silent and why
+The MP4 still has no audio embedded. `directorAudio` produced and returned an `AudioBuffer`, and the pipeline validated its shape and timing. Embedding it into the MP4 needs a small `encodeMp4` surface change (accept `audioBuffer` alongside `audioBlob`); that lands in v1.6.8 alongside the first real TTS pass. Today: silent video + cover postcard ready to share. The MP4 file you download right now will play in QuickTime; the audio is the only thing missing.
+
+### State of the lake
+Every pure-code piece of the AI Cinematographer has landed. The remaining gates are operational, not code:
+1. TTS quality validation ($5 ElevenLabs sample to a relative — your job)
+2. Worker hardening (Turnstile + DO + KV + R2 + killswitch) before any public deploy
+3. AudioBuffer → MP4 wiring (~30 lines, ships in v1.6.8)
+
 ## [1.6.6] - 2026-05-13 — AI Cinematographer Step 6: directorTTS (silent / tone / live providers)
 
 The TTS service layer per the design doc — produces one `Float32Array` of narration audio
