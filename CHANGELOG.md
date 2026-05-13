@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.1] - 2026-05-13 — AI Cinematographer Step 2a: per-frame compositor (color grade + caption burn-in)
+
+Two of the auto-decided items from /autoplan land as pure helpers, fully tested in jsdom.
+Both wire into the eventual MP4 render path between `reelRenderer.captureFrame` and the
+WebCodecs encoder. Reels live preview and the postcard cover frame share the same code.
+
+### Added
+- **`src/services/colorGrade.js`** — per-frame 4x4 color-matrix LUT applied via ImageData. Identity fast-path is a no-op so tones without tint pay nothing. Replaces the original design doc's wrong "color LUT applied to map tiles via basemap variants" plan that the eng review caught (raster tiles can't be tinted via style filters; CSS filters don't land in WebGL framebuffer captures).
+- **`src/services/captionBurnIn.js`** — per-line burned-in captions with safe-zone-aware layout for 9:16 export (220px top inset, 320px bottom Instagram gutter). Per-language font selection (Telugu → Mandali, Hindi → Tiro Devanagari, Tamil → Catamaran, English/fallback → Fraunces). Greedy word wrap that shrinks font (not text) when long Indic place names overflow. Fade-in/fade-out opacity envelope from the palette.
+- **`src/services/sceneComposer.js`** — wraps per-frame work: `composeFrame(ctx, {sourceFrame, scenes, t, palette, language})` draws the source frame, runs the LUT, finds the active scene, burns its caption. `skipGrade` / `skipCaption` options so Reels can reuse the same code for live preview and postcards can reuse for cover frames.
+
+### Tests
+- `test/color-grade.test.js`, `test/caption-burn-in.test.js`, `test/scene-composer.test.js` — 49 new tests, all green. Total suite: 366/366.
+
 ## [1.6.0] - 2026-05-13 — AI Cinematographer Step 1: Director scaffold + tone palettes + Worker contract
 
 First commit of the AI Cinematographer per the office-hours design doc at
