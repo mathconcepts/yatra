@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { isExportSupported, framePlan } from "../src/services/mp4Export";
+import { describe, it, expect, vi } from "vitest";
+import { isExportSupported, framePlan, resolveAudioPlan } from "../src/services/mp4Export";
 
 describe("isExportSupported", () => {
   it("reports unsupported in jsdom (no WebCodecs)", () => {
@@ -38,5 +38,42 @@ describe("framePlan", () => {
   });
   it("computes totalFrames from fps × duration", () => {
     expect(framePlan({ fps: 24, durationSec: 10 }).totalFrames).toBe(240);
+  });
+});
+
+describe("resolveAudioPlan", () => {
+  it("prefers audioBuffer when both are present (no decode call)", async () => {
+    const decodeBlob = vi.fn(async () => ({ sampleRate: 22050, numberOfChannels: 1 }));
+    const audioBuffer = { sampleRate: 48000, numberOfChannels: 2 };
+    const plan = await resolveAudioPlan({ audioBuffer, audioBlob: {}, decodeBlob });
+    expect(plan).toEqual({ buffer: audioBuffer, channels: 2, sampleRate: 48000 });
+    expect(decodeBlob).not.toHaveBeenCalled();
+  });
+
+  it("decodes audioBlob via the injected decoder when no buffer", async () => {
+    const decoded = { sampleRate: 44100, numberOfChannels: 2 };
+    const decodeBlob = vi.fn(async () => decoded);
+    const plan = await resolveAudioPlan({ audioBlob: { __blob: true }, decodeBlob });
+    expect(plan).toEqual({ buffer: decoded, channels: 2, sampleRate: 44100 });
+    expect(decodeBlob).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns null when neither source is present", async () => {
+    expect(await resolveAudioPlan({})).toBeNull();
+  });
+
+  it("returns null when audioBlob decoder yields a falsy result", async () => {
+    const plan = await resolveAudioPlan({ audioBlob: {}, decodeBlob: async () => null });
+    expect(plan).toBeNull();
+  });
+
+  it("returns null when audioBuffer is malformed (no sampleRate)", async () => {
+    const plan = await resolveAudioPlan({ audioBuffer: { foo: 1 } });
+    expect(plan).toBeNull();
+  });
+
+  it("defaults to 1 channel when audioBuffer omits numberOfChannels", async () => {
+    const plan = await resolveAudioPlan({ audioBuffer: { sampleRate: 48000 } });
+    expect(plan.channels).toBe(1);
   });
 });

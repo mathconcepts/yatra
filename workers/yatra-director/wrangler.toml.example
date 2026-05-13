@@ -1,0 +1,49 @@
+# Copy to wrangler.toml and fill in account_id before running `wrangler dev`.
+# wrangler.toml itself is gitignored; secrets go via `wrangler secret put`.
+
+name = "yatra-director"
+main = "src/index.js"
+compatibility_date = "2026-05-13"
+
+# account_id = "YOUR_CLOUDFLARE_ACCOUNT_ID"
+
+# Bindings to provision before going live. Names are referenced by src/index.js.
+# Uncomment after creating each resource (`wrangler kv namespace create <name>`).
+#
+# All bindings are OPTIONAL. The Worker degrades cleanly when each is absent:
+#   - No SCRIPT_CACHE / TTS_CACHE → every request hits upstream (no caching).
+#   - No BUDGET_KV → daily-spend gate is bypassed (rely on Cloudflare + GCP billing alerts).
+#   - No DIRECTOR_KILLSWITCH var → kill switch defaults off.
+# Recommended for any public deploy: bind all three KV namespaces.
+
+# [[kv_namespaces]]
+# binding = "BUDGET_KV"
+# id = "YOUR_BUDGET_KV_ID"
+
+# [[kv_namespaces]]
+# binding = "SCRIPT_CACHE"
+# id = "YOUR_SCRIPT_CACHE_KV_ID"
+
+# [[kv_namespaces]]
+# binding = "TTS_CACHE"
+# id = "YOUR_TTS_CACHE_KV_ID"
+
+# Per-IP rate limiter (v1.6.11). Default limits: 10/min, 60/hr, 200/day.
+# Fail-open on DO error so a DO outage doesn't take down the Worker.
+# [[durable_objects.bindings]]
+# name = "RATE_LIMITER"
+# class_name = "RateLimiter"
+#
+# # Migration required to create the DO class (first deploy only):
+# [[migrations]]
+# tag = "v1"
+# new_classes = ["RateLimiter"]
+
+# [vars]
+# DIRECTOR_KILLSWITCH = "0"
+# DIRECTOR_DAILY_CAP_MILLICENTS = "500000"   # $5 / day. 1 millicent = 0.001 cent.
+
+# Secrets (set via `wrangler secret put <NAME>`, never put in this file):
+#   ANTHROPIC_API_KEY    — Claude Haiku for /v1/script
+#   GOOGLE_TTS_API_KEY   — Google Cloud Text-to-Speech for /v1/tts (free tier covers 1M chars/month)
+#   TURNSTILE_SECRET_KEY — required before public deploy (see SECURITY.md)

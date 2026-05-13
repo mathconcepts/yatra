@@ -1,0 +1,16 @@
+{
+  "name": "yatra-director",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare Worker proxying Claude/ElevenLabs/OpenAI for Yatra's AI Cinematographer. See API.md and SECURITY.md.",
+  "scripts": {
+    "dev": "wrangler dev --local --persist",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail",
+    "prompt": "node scripts/prompt-repl.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^3.80.0"
+  }
+}

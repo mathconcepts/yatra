@@ -1,0 +1,54 @@
+{
+  "routeId": "yadagiri-gutta",
+  "tone": "devotional",
+  "language": "te",
+  "scenes": [
+    {
+      "id": "origin",
+      "tStart": 0.0,
+      "tEnd": 4.5,
+      "narration": "ఆరంభం. యాదాద్రి కొండ దిగువన.",
+      "captionText": "ఆరంభం · యాదాద్రి దిగువ",
+      "captionStyle": "headline"
+    },
+    {
+      "id": "approach",
+      "tStart": 4.5,
+      "tEnd": 11.0,
+      "narration": "మెట్లు మెల్లగా ఎక్కువుతాయి. గాలి శాంతంగా ఉంది.",
+      "captionText": "మెట్లు మెల్లగా · శాంత గాలి",
+      "captionStyle": "subtitle"
+    },
+    {
+      "id": "peak-climb",
+      "tStart": 11.0,
+      "tEnd": 18.0,
+      "narration": "నిటారు ఎక్కుబడి. ఊపిరి కొంచెం బిగుసుకుంటుంది.",
+      "captionText": "నిటారు ఎక్కుబడి",
+      "captionStyle": "subtitle"
+    },
+    {
+      "id": "landmark-mandapam",
+      "tStart": 18.0,
+      "tEnd": 23.5,
+      "narration": "మండపం. గంట మోగుతుంది.",
+      "captionText": "మండపం · గంట",
+      "captionStyle": "subtitle"
+    },
+    {
+      "id": "summit",
+      "tStart": 23.5,
+      "tEnd": 30.0,
+      "narration": "శిఖరం. యాదాద్రి దర్శనం.",
+      "captionText": "శిఖరం · దర్శనం",
+      "captionStyle": "headline"
+    }
+  ],
+  "meta": {
+    "scriptModel": "mock-fixture",
+    "totalDurationS": 30.0,
+    "wordCount": 27,
+    "generatedAt": "2026-05-13T00:00:00Z",
+    "notes": "Hand-authored placeholder for VITE_DIRECTOR_MOCK=1 dev loop. Replace with /v1/script output once the Worker is live."
+  }
+}

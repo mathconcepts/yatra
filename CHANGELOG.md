@@ -2,6 +2,290 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.11] - 2026-05-13 — AI Cinematographer Step 11: per-IP rate limit (Durable Object)
+
+The last auto-decided Worker control. With this commit, the deploy gate from the autoplan
+review is fully addressed — every layer from the design doc's distribution plan is now
+wired. Defaults: 10/min, 60/hr, 200/day per IP. Three-window check catches both
+short-burst abuse and slow-trickle scrapers.
+
+### Added
+- **`workers/yatra-director/rateLimiter.js`**:
+  - Pure helpers `bucketId`, `nextBucketStartMs`, `rolloverState`, `emptyState`.
+  - `checkAndConsume(state, nowMs, limits)` — pure (state, time, limits) → `{state, allowed, limit, remaining, resetAtMs, retryAfterMs, window}`. Blocks on the tightest binding window. Does NOT consume on a blocked request (no double-jeopardy).
+  - `RateLimiter` Durable Object class — thin wrapper around `checkAndConsume` that persists state per IP. `state.storage.get("state")` → `checkAndConsume` → `state.storage.put("state", ...)`.
+  - `consumeForIp(env, ip, limits)` — Worker-side helper that fetches the DO stub for an IP and returns the audit struct. Fail-open on any DO error (DO down, malformed response) — pragmatic side-project default; SECURITY.md notes the trade-off.
+
+### Changed
+- **`src/index.js`** — `preflight` now runs rate-limit between Turnstile and budget. 429 responses carry full `X-RateLimit-*` headers (`Limit`, `Remaining`, `Reset`, `Window`) plus `Retry-After` so HTTP clients backoff correctly. Re-exports `RateLimiter` so Wrangler can register the DO class.
+- **`wrangler.toml.example`** — documents the `[[durable_objects.bindings]] + [[migrations]]` block needed to create the DO class on first deploy.
+- **`SECURITY.md`** — status banner updated; all five auto-decided controls now wired. Pre-deploy checklist's rate-limit item ticked.
+
+### Tests
+- 14 new tests in `test/rate-limiter.test.js`: bucket math (monotonic, stable inside windows, next-edge), rollover (zeroes only crossed windows, preserves the others, minute-only rollover), checkAndConsume (allow path, three-window blocking with correct binding window, no-consume-on-block invariant, minute rollover restores access, hourly cap binds when minute is fresh, default limits, tightest-window remaining math, future resetAtMs). Total: 578/578.
+
+### What this closes
+The pre-deploy checklist from `SECURITY.md` is now fully addressable with no further code. The remaining items are operational: provision Turnstile secrets, create the KV namespaces and DO migration, set the GCP key, run `wrangler deploy`. Public deploy is no longer gated on engineering — only on TTS quality validation and your decision to go public.
+
+## [1.6.10] - 2026-05-13 — AI Cinematographer Step 10: Worker hardening (Turnstile + cache + budget + kill switch)
+
+Four of the five auto-decided Worker controls land. Each gate degrades cleanly when its
+binding/secret is absent, so dev still works key-less; production deploys provision the
+full set per the SECURITY.md checklist. Per-IP rate-limit (Durable Object) is the last
+TODO; it ships in v1.6.11.
+
+### Added
+- **`workers/yatra-director/turnstile.js`** — pure `parseTurnstileResponse` + thin `verifyTurnstileToken({token, secret, remoteIp, fetchImpl, timeoutMs})` wrapper. Errors carry `code` (`missing-token | missing-secret | timeout | network`) for RFC-7807 mapping.
+- **`workers/yatra-director/idempotencyCache.js`** — `sha256Hex`, `buildScriptCacheKey({routeId, tone, language, durationS})`, `buildTtsCacheKey({voiceId, tempo, text, language})` (text is sha256-hashed before being put in the key so raw user content never lands in the cache namespace), `getCached(kv, key, {as})`, `putCached(kv, key, value, {as, ttlS})`. 30-day TTL by default.
+- **`workers/yatra-director/budgetGuard.js`** — `dayKey(date)` (UTC YYYY-MM-DD), `estimateCost(route, body)` in millicents (1¢ per script, ~26mc per 1k chars of TTS), `readSpend(kv, key)`, `recordSpend(kv, key, costMc)`, `checkBudget({kv, route, body, cap, now})` → `{allowed, projected, cost, prior, cap, key}`.
+- **Shared `preflight({request, env, origin, id, route, body})`** in `src/index.js` running kill switch → Turnstile → daily budget. Same gate uniformly applied to `/v1/script` and `/v1/tts`.
+- **Cache headers** — every cached hit/miss labels itself via `X-Yatra-Cache: hit|miss` so the client (and you, in DevTools) can see whether a request hit upstream.
+
+### Changed
+- **`workers/yatra-director/src/index.js`** — both handlers now run `preflight`, look up an idempotency cache before calling upstream, record spend + write cache on success. Three of the four TODO blocks from earlier commits are now resolved.
+- **`SECURITY.md`** — pre-deploy checklist updated; status banner at the top reflects the v1.6.10 surface. Per-IP rate limit is the only item still marked TODO.
+- **`wrangler.toml.example`** — bindings expanded (`BUDGET_KV`, `SCRIPT_CACHE`, `TTS_CACHE`), all annotated as optional with degraded behavior documented. New var `DIRECTOR_DAILY_CAP_MILLICENTS` (default 500000 = $5/day).
+
+### Tests
+- 49 new tests across three suites:
+  - `test/turnstile.test.js` (10): form-encoded body, success/rejection parsing, missing-token/secret rejection, timeout/network error mapping, remoteIp inclusion.
+  - `test/idempotency-cache.test.js` (16): known sha256 vectors (empty + "abc"), key stability across calls, key divergence across inputs, raw-text-never-in-key invariant, JSON + ArrayBuffer round-trips, unbound-KV no-op, error swallowing, default + explicit TTL.
+  - `test/budget-guard.test.js` (23): UTC dayKey, cost estimation by route + text length, spend accumulation across calls, unbound-KV/get-throw/garbage-value handling, custom-cap respect, today's-key selection.
+- Total: 564/564.
+
+### Deploy gate (one item left)
+Per-IP rate limit needs a Durable Object class binding. Ships in v1.6.11 — pure code, no key required, but the gate is most useful when it can actually serve traffic.
+
+## [1.6.9] - 2026-05-13 — AI Cinematographer Step 9: `/v1/tts` backed by Google Cloud TTS (free tier)
+
+Per user request: swap the planned-ElevenLabs TTS backend for Google Cloud Text-to-Speech.
+Free tier covers 1M chars/month per voice family — effectively unmetered for a side
+project. Native Indic voices (`te-IN`, `hi-IN`, `ta-IN`) at Wavenet quality. Simple REST
++ API key auth (no OAuth flow, no WebSocket protocol-sniffing).
+
+### Added
+- **`workers/yatra-director/googleTtsClient.js`** with pure builders + thin fetch:
+  - `LANGUAGE_TO_LOCALE` — maps `en | hi | te | ta` to `en-IN | hi-IN | te-IN | ta-IN`. en-IN gives Indian-English accent, which fits the pilgrimage context better than en-US.
+  - `buildGoogleTtsRequest({text, voiceId, language, tempo})` — clamps `tempo` to Google's `[0.25, 4.0]` `speakingRate` range; defaults to 1.0 on garbage input; rejects unsupported language.
+  - `base64ToArrayBuffer` — strips whitespace defensively; works in both Worker and jsdom.
+  - `parseGoogleTtsResponse(json)` — decodes Google's `audioContent` base64 → ArrayBuffer.
+  - `callGoogleTTS({apiKey, text, voiceId, language, tempo, fetchImpl, timeoutMs})` — 12-second timeout via AbortController. Errors carry `code` (`auth | rate | timeout | parse`) so the Worker maps onto RFC-7807 status codes.
+- **Worker `/v1/tts` route** in `src/index.js` — calls Google TTS when `GOOGLE_TTS_API_KEY` is set, returns 503 `tts-not-configured` otherwise. Response is raw `audio/mpeg` bytes (not JSON-wrapped) so the client can pipe straight into `AudioContext.decodeAudioData` without unwrapping.
+
+### Changed
+- **`src/services/tonePalettes/devotional.js`** — replaced `REPLACE_*_DEVOTIONAL` placeholders with real Google Cloud TTS voice names: `te-IN-Standard-A`, `hi-IN-Wavenet-A`, `ta-IN-Wavenet-A`, `en-IN-Wavenet-A`. Devotional gets a calm female voice across all four languages by default.
+- **`API.md`** — full `/v1/tts` contract (request shape, response Content-Type, error codes); marks the section "implemented" (was "planned").
+- **`SECURITY.md`** — updated cost table to reflect Google TTS economics. Per-multilingual-render cost drops from the ElevenLabs $0.72 figure to ~$0.04 paid OR $0 within free tier. Added GCP billing-alert item to the pre-deploy checklist.
+- **`README.md`** — Status section now reflects "v1.6.9 wires real upstream APIs" with both Anthropic and Google paths documented.
+- **`wrangler.toml.example`** — secret list narrowed to the three keys actually used (Anthropic, Google, Turnstile).
+
+### Tests
+- 17 new tests on `googleTtsClient`: locale mapping, request assembly with speakingRate clamping and tempo defaults, base64 decoding (known string + whitespace-strip), response parsing (missing/empty/malformed), and the full `callGoogleTTS` surface (POST shape, auth/rate/timeout/parse error mapping, missing-audioContent rejection). Total: 509/509.
+
+### What's left
+- Worker hardening (Turnstile + DO rate-limit + KV daily ceiling + R2 idempotency cache + kill switch) before any public deploy. See `SECURITY.md`.
+- TTS quality validation. With Google TTS the validation flow changes shape: provision a free-tier GCP API key (5 min), `wrangler secret put GOOGLE_TTS_API_KEY`, hit `/v1/tts` from the local Director with one Telugu line, send the resulting MP4 to a relative. The $5 spend is gone — the test is now free.
+
+## [1.6.8] - 2026-05-13 — AI Cinematographer Step 8: MP4 embeds the mixer's audio directly
+
+The audio gap from v1.6.7 closed. `encodeMp4` now accepts an `audioBuffer` option alongside
+the legacy `audioBlob`. The Director pipeline already has an `AudioBuffer` in hand (from
+the OfflineAudioContext-backed mixer), so it passes it through without the Blob → decode
+round-trip. When the mixer runs in `silent` mode the embedded track is silent samples;
+when it runs in `tone` or `live` the audience hears what the mixer produced.
+
+### Added
+- **`resolveAudioPlan({audioBuffer, audioBlob, decodeBlob})`** — pure-ish helper in `src/services/mp4Export.js`. Prefers `audioBuffer` when present (no decode); falls back to decoding `audioBlob` via the injected `decodeBlob`. Returns `null` cleanly when neither source resolves. Defaults channel count to 1 when buffer omits it.
+
+### Changed
+- **`encodeMp4`** — new `audioBuffer` option, routed through `resolveAudioPlan`. Existing `audioBlob` callers (Composer narration upload) keep working — the legacy path now goes through the same resolver.
+- **`directorPipeline`** — passes the mixer's `audioBuffer` directly into `encodeMp4`. The `audioBlob: null` from v1.6.7 is gone.
+- **`DirectorView`** — result note now reflects audio status accurately: shows the resolved mode ("silent" / "tone" / "live") and whether the buffer was embedded.
+
+### Tests
+- 6 new tests on `resolveAudioPlan`: buffer-wins-over-blob (no decoder called), blob-decode path, both-missing returns null, decoder returns falsy, malformed buffer rejection, channel-count default. Plus 2 new pipeline tests asserting the mixer's `audioBuffer` is forwarded to `encodeMp4` and that the `audioBuffer: null` path is preserved when no `createAudioBuffer` was wired. Total: 492/492.
+
+### What's left
+- Real TTS (Worker `/v1/tts` route + ElevenLabs key) — code is wired in `directorTTS.synthesizeSceneLive`, just needs the Worker route implemented + key provisioned.
+- Worker hardening per `SECURITY.md`.
+- TTS quality validation ($5, 10 minutes, your job — and the moat).
+
+## [1.6.7] - 2026-05-13 — AI Cinematographer Step 7: end-to-end pipeline (DirectorView ships a real MP4)
+
+The glue commit. DirectorView's "Direct this journey" button now runs the full chain:
+script → TTS → audio mix → director-mode renderer → MP4 encode → postcard cover. Click,
+wait ~30 seconds, get a downloadable MP4 + downloadable postcard PNG.
+
+### Added
+- **`src/services/directorPipeline.js`**:
+  - `framePlanForDuration(durationS, fps)` — pure frame-count math.
+  - `scenesToAudioTiming(scenes)` — pure scene-starts + total-duration extractor.
+  - `runDirectorPipeline({config, palette, language, ...})` — orchestrator. Calls `generateScript` → `synthesizeScenes` → `mixDirectorAudio` → `createOffscreenReelRenderer({directorMode})` → `encodeMp4` → `exportPostcard`. Returns `{mp4Url, postcardUrl, scenes, mode, audioBuffer, frameCount, durationS}`. Emits per-stage progress events. Every dependency is injected; the production caller in DirectorView wires real modules, tests inject fakes.
+
+### Changed
+- **`src/components/director/DirectorView.jsx`** — now runs the full pipeline on click. New result UI: download links for MP4 and postcard PNG, collapsed scene list under a `<details>`, real progress messages per stage ("Composing the script", "Recording the voice", "Color-grading the map", "Cutting the film", "Printing the postcard"). Cancel button replaces the CTA mid-run via `AbortController`. Lazy-loads `reelRenderer` + `mp4Export` so first paint stays fast.
+- `OfflineAudioContext` wired in as the production `createAudioBuffer` factory when the host supports it; pipeline degrades cleanly without it.
+
+### Tests
+- 14 new tests in `test/director-pipeline.test.js`: frame-plan math, scene-timing extraction, full orchestrator walk with progress events captured, directorMode payload passed to renderer, first-frame-as-postcard-hero passthrough, abort mid-render, input validation, missing-dep rejection, empty-script handling, no-audio-buffer fallback. Total: 484/484.
+
+### What's silent and why
+The MP4 still has no audio embedded. `directorAudio` produced and returned an `AudioBuffer`, and the pipeline validated its shape and timing. Embedding it into the MP4 needs a small `encodeMp4` surface change (accept `audioBuffer` alongside `audioBlob`); that lands in v1.6.8 alongside the first real TTS pass. Today: silent video + cover postcard ready to share. The MP4 file you download right now will play in QuickTime; the audio is the only thing missing.
+
+### State of the lake
+Every pure-code piece of the AI Cinematographer has landed. The remaining gates are operational, not code:
+1. TTS quality validation ($5 ElevenLabs sample to a relative — your job)
+2. Worker hardening (Turnstile + DO + KV + R2 + killswitch) before any public deploy
+3. AudioBuffer → MP4 wiring (~30 lines, ships in v1.6.8)
+
+## [1.6.6] - 2026-05-13 — AI Cinematographer Step 6: directorTTS (silent / tone / live providers)
+
+The TTS service layer per the design doc — produces one `Float32Array` of narration audio
+per scene, ready for `directorAudio.mixDirectorAudio` to assemble into the master narration
+channel. Three providers; default is `silent` when `VITE_DIRECTOR_MOCK=1`.
+
+### Added
+- **`src/services/directorTTS.js`** with:
+  - `synthesizeSilence(durationS, sampleRate)` — exact-length zero channel.
+  - `synthesizeTone(durationS, sampleRate, {freq, amp})` — 220 Hz sine with 30ms cosine fades for audible pipeline checks without paying for TTS.
+  - `buildTtsRequest({scene, palette, language})` — pure /v1/tts request assembler; rejects unknown languages or missing voice ids.
+  - `alignToSceneDuration(samples, durationS, sampleRate)` — pad or truncate audio to fit the scene slot exactly so master-timeline math stays clean even when providers return imprecise lengths.
+  - `synthesizeSceneLive(scene, {workerBase, fetchImpl, decodeAudio, ...})` — POST to Worker `/v1/tts`, decode bytes via injected `decodeAudio` (production wraps `AudioContext.decodeAudioData`), align to scene duration.
+  - `synthesizeScenes({scenes, palette, language, sampleRate, mode, workerBase, fetchImpl, decodeAudio})` — orchestrator. Mode auto-detects (`silent` when `VITE_DIRECTOR_MOCK=1`, else `live`). Returns `{tracks, mode}` — `tracks` is `Float32Array[]` aligned to scene order, drop-in for `mixDirectorAudio({sceneTracks, sceneStartsS})`.
+  - `sceneStarts(scenes)` — convenience for the mixer's `sceneStartsS` arg.
+
+### Why silent is the default
+The autoplan CEO review said Indic TTS quality is the entire moat and must be validated with a $5 ElevenLabs sample before more code is worth writing. Until that validation happens, the pipeline ships silent — honest about what it is. `tone` mode is the audible cousin for timing sanity checks without paying for TTS.
+
+### Tests
+- 24 new tests covering: silence/tone math (length, fade endpoints, amplitude scaling), peak detection that avoids periodic-signal zero-crossings, request assembly (4 languages + rejection), scene-duration alignment (longer/shorter/null inputs), live provider (correct POST body, scene-duration padding, worker-error propagation, missing-dep rejection), orchestrator routing across silent/tone/live, missing workerBase failure, input validation. Total: 470/470.
+
+### Not yet
+- `synthesizeScenes` is not yet called by `DirectorView`. One glue commit (script → TTS → mixer → composeFrame → mp4Export → exportPostcard cover) wires the full pipeline.
+
+## [1.6.5] - 2026-05-13 — AI Cinematographer Step 5: exportPostcard (the WhatsApp preview artifact)
+
+The most-shareable artifact per byte. Stills survive WhatsApp compression where MP4s get
+crushed; OG preview thumbnails carry 80% of the in-feed storytelling before anyone taps
+play. The postcard render is also the canonical first frame of every Director MP4, so the
+same function works as standalone PNG export and as a video frame.
+
+### Added
+- **`src/services/exportPostcard.js`** with three pure helpers plus an orchestrator:
+  - `formatStatsLine({distanceKm, durationHr, elevGainM, language})` — localized stats. Distance/duration formatting is locale-aware; unit suffixes translate (km → కిమీ / किमी / கி.மீ). Digits stay Latin for cross-script feed legibility.
+  - `layoutPostcard({width, height, palette})` — region rectangles for hero (55%), title (18%), subtitle (12%), ornament (15%). Insets scale proportionally to canvas height.
+  - `drawPostcard(ctx, {sourceFrame, palette, language, title, statsLine})` — paints parchment background, draws hero (source frame or palette gradient placeholder), typesets title with `fontForLanguage`, draws subtitle stats, draws ornament rule + accent label.
+  - `exportPostcard({sourceCanvas, config, palette, language})` — orchestrator that creates a 9:16 canvas (720×1280 default), renders, returns blob URL. Production wires real `document.createElement('canvas')`, `canvas.toBlob`, `URL.createObjectURL`; tests inject fakes.
+
+### Tests
+- 22 new tests in `test/export-postcard.test.js`: stats formatting (4 languages, edge cases, fallbacks), layout regions (no overlap, proportional scaling, input validation), drawing (background, hero, title font selection per language, gradient placeholder fallback, ornament), end-to-end orchestrator (blob URL, climb computation from origin/destination, source-canvas passthrough, encode failure). Total: 444/444.
+
+### Not yet
+- `exportPostcard` is not yet wired into `exportRouter.exportArtifact` or `DirectorView`'s download button. That single-line glue commit waits until DirectorView has a render to share.
+- The mandala SVG ornament referenced in `devotional.js` (`palette.ornament.asset`) is not yet shipped; the postcard currently uses a saffron rule + label. SVG ornament lands when the visual design is locked.
+
+## [1.6.4] - 2026-05-13 — AI Cinematographer Step 4: Worker calls real Claude
+
+`/v1/script` now calls Anthropic Claude Haiku 4.5 with the curated Devotional system prompt
+when `ANTHROPIC_API_KEY` is provisioned via `wrangler secret put`. When the key is absent
+(dev or first-deploy verification), the Worker falls back to the stub-echo shape so the
+network path still works end-to-end without coupling deploys to key provisioning.
+
+### Added
+- **`workers/yatra-director/claudeClient.js`** — pure parts (`extractSystemPrompt`, `buildUserPrompt`, `parseClaudeResponse`) plus the thin `callClaude` fetch wrapper. 15-second timeout with AbortController. Errors carry a `code` field (`auth | rate | timeout | parse`) so the Worker maps them onto RFC-7807 status codes (502/503/504).
+- **`workers/yatra-director/prompts/devotional.md`** — human-editable source-of-truth for the Devotional system prompt. Includes religious-safety constraints from the autoplan CEO review ("never invent deity attribution, never invent Vaishnava/Shaiva conflations beyond curated facts").
+- **`workers/yatra-director/src/prompts.js`** — JS-bundle mirror of the .md prompts. Sync-by-hand for now; future `scripts/sync-prompts.mjs` automates it.
+- Worker `handleScript`: validates tone has a wired prompt, calls Claude when key present, falls back to stub when not. Errors from `callClaude` map to upstream-claude RFC-7807 problem responses with appropriate status codes.
+
+### Tests
+- 23 new tests in `test/claude-client.test.js`: prompt extraction, user-prompt assembly (peak moment formatting, curated-facts safety messaging, empty-landmarks handling), response parsing (JSON, fenced JSON, schema validation, error paths), `callClaude` integration (auth/rate/timeout/parse error mapping, multi-block text joining). Total: 422/422.
+
+### Deploy gate (unchanged)
+Worker still NOT deploy-ready. `SECURITY.md` checklist (Turnstile, rate-limit DO, KV daily ceiling, R2 cache, kill switch) is the gate. The Claude integration is wired but unguarded.
+
+## [1.6.3] - 2026-05-13 — AI Cinematographer Step 3: audio mixer (OfflineAudioContext-ready)
+
+The directorAudio.js mixer per the autoplan eng review's call: all math in Float32Array
+land so it's unit-testable, with a thin orchestrator that touches OfflineAudioContext
+through an injected `createBuffer`. Production passes
+`new OfflineAudioContext(1, length, sr).createBuffer.bind(ctx)`; tests pass a fake.
+
+### Added
+- **`src/services/directorAudio.js`** with pure primitives:
+  - `dbfsToGain(dbfs)` — handles 0, -6, -Infinity, NaN cleanly.
+  - `mixInto(out, source, {outOffset, gain, gainEnvelope})` — additive mix with clip to [-1, 1].
+  - `mixWithEqualPowerFade(out, source, {fadeSamples, ...})` — sin/cos endpoints land exactly at 0; for scene-boundary narration crossfade.
+  - `sidechainEnvelope(narration, {threshold, floorGain, attackMs, releaseMs, sampleRate})` — running-RMS windowed gate + one-pole attack/release. Music/ambient gain dips when narration is loud, recovers when silent.
+  - `ambientEnvelope(proximity, rule)` — gates ambient (temple bell, wind) by per-sample landmarkProximityFactor; linear interpolation between rule.gateAt → rule.peakAt.
+  - `loopToLength(source, lengthSamples)` — extend music beds to full render length.
+  - `concatenateNarration({sceneTracks, sceneStartsS, sampleRate, lengthSamples, crossfadeMs})` — assemble scene-by-scene TTS into a master narration channel.
+  - `mixDirectorAudio({sampleRate, durationS, sceneTracks, musicBed, ambientSources, proximityChannel, palette, createBuffer})` — orchestrator. Returns the AudioBuffer ready for the existing `encodeAacFromBuffer` path in audioEncode.js.
+
+### Tests
+- 27 new tests covering dB→gain, additive mix + clip, equal-power crossfade endpoints, sidechain attack/release, ambient gate/peak/saturate, music ducking under narration, ambient gated by proximity ramp, input validation. Total: 398/398.
+
+### What's wired vs not
+- Mixer is the **pipeline-final shape** — it produces what `encodeAacFromBuffer` already expects.
+- It is **not yet called** by `DirectorView`. That landing comes next, when `/v1/tts` is real and narration buffers exist to feed it.
+- The OfflineAudioContext call site that wraps this is a 4-line factory; deferred to the same commit that wires TTS so we don't introduce a dead call path.
+
+## [1.6.2] - 2026-05-13 — AI Cinematographer Step 2b: wire compositor into reelRenderer (opt-in)
+
+Low-risk opt-in wiring of the v1.6.1 compositor into the existing offscreen reel renderer.
+Existing call sites unchanged — when `directorMode` is absent (everywhere today), `captureFrame`
+returns the raw map snapshot exactly as before. When `directorMode` is provided, every frame
+is graded + caption-burned before encoding.
+
+### Added
+- **`wrapCaptureWithDirector(captureFrame, {scenes, palette, language, durationS, ...})`** in `src/services/reelRenderer.js`. Pure factory; dependencies (`createCanvas`, `createBitmap`, optional `composeFn`) injected for testability. Reuses one working canvas across all frames in a render. Clamps `t` to `[0, 1]` and maps to absolute seconds via `durationS`.
+- **`directorMode` option** on `createOffscreenReelRenderer(config, {directorMode})`. When set, the rendered `captureFrame` is wrapped. Production passes browser `createImageBitmap` + a real HTMLCanvasElement factory.
+
+### Tests
+- 6 new tests in `test/reel-renderer.test.js` covering: wrapper output shape, canvas reuse across frames, t→seconds mapping + clamping, error propagation from the underlying capture, and input validation. Total: 371/371.
+
+### What this unblocks
+The Director surface can now ask the renderer for graded+captioned frames in one call. Next step (audio mixing + Worker Claude wiring) plugs into this without touching the renderer again.
+
+## [1.6.1] - 2026-05-13 — AI Cinematographer Step 2a: per-frame compositor (color grade + caption burn-in)
+
+Two of the auto-decided items from /autoplan land as pure helpers, fully tested in jsdom.
+Both wire into the eventual MP4 render path between `reelRenderer.captureFrame` and the
+WebCodecs encoder. Reels live preview and the postcard cover frame share the same code.
+
+### Added
+- **`src/services/colorGrade.js`** — per-frame 4x4 color-matrix LUT applied via ImageData. Identity fast-path is a no-op so tones without tint pay nothing. Replaces the original design doc's wrong "color LUT applied to map tiles via basemap variants" plan that the eng review caught (raster tiles can't be tinted via style filters; CSS filters don't land in WebGL framebuffer captures).
+- **`src/services/captionBurnIn.js`** — per-line burned-in captions with safe-zone-aware layout for 9:16 export (220px top inset, 320px bottom Instagram gutter). Per-language font selection (Telugu → Mandali, Hindi → Tiro Devanagari, Tamil → Catamaran, English/fallback → Fraunces). Greedy word wrap that shrinks font (not text) when long Indic place names overflow. Fade-in/fade-out opacity envelope from the palette.
+- **`src/services/sceneComposer.js`** — wraps per-frame work: `composeFrame(ctx, {sourceFrame, scenes, t, palette, language})` draws the source frame, runs the LUT, finds the active scene, burns its caption. `skipGrade` / `skipCaption` options so Reels can reuse the same code for live preview and postcards can reuse for cover frames.
+
+### Tests
+- `test/color-grade.test.js`, `test/caption-burn-in.test.js`, `test/scene-composer.test.js` — 49 new tests, all green. Total suite: 366/366.
+
+## [1.6.0] - 2026-05-13 — AI Cinematographer Step 1: Director scaffold + tone palettes + Worker contract
+
+First commit of the AI Cinematographer per the office-hours design doc at
+`~/.gstack/projects/mathconcepts-yatra/root-claude-install-gstack-RXXAr-design-20260513-133915.md`.
+Reviewed via `/autoplan` (CEO + Design + Eng + DX subagents); user accepted B-straight
+direction and the auto-decided security baseline.
+
+### Added
+- **`src/services/tonePalettes/`** — the taste layer. `schema.js` validator loud-fails on missing fields. `devotional.js` ships concrete values: saffron `#8a4528` + parchment `#f4ede1` baseline; Indic font stack (Tiro Devanagari Hindi / Mandali Telugu / Catamaran Tamil) — Cormorant Garamond has zero Indic glyph coverage so it's no longer the fallback for Indic text. 4x4 color-matrix LUT, per-line burned-in captions (Instagram autoplays muted; sound-off viewers cannot otherwise see narration). Explorer / Poetic / Historical inherit Devotional's shape as stubs.
+- **`src/services/directorScript.js`** — script generator with `VITE_DIRECTOR_MOCK=1` mode. Returns a hand-authored Telugu Devotional Yadagiri fixture so contributors can render end-to-end without any API key. Live mode posts to the Cloudflare Worker's `/v1/script`. Reuses `detectPeakMoments` so scenes ARE peak moments.
+- **`src/components/director/DirectorView.jsx`** — new `?surface=director` route. Tone picker first (4 palettes), then route, then language chips (en/hi/te/ta, defaults to device locale). One "Direct this journey" button. v0 renders the returned scenes as a text list; TTS + audio mixing + map render + MP4 mux land in later commits.
+- **`workers/yatra-director/`** — Cloudflare Worker scaffold with `API.md` (versioned `/v1/script`, RFC-7807 error shape, Turnstile + rate-limit + idempotency contract), `SECURITY.md` (pre-deploy checklist, rotation cadence, leak playbook, ~$0.72 multilingual-render cost analysis with the $7,200-scraper-loop risk made explicit), shared `schemas.js` imported by both Worker and client, stub `src/index.js` that echoes a one-scene placeholder so the network path is exercised before Claude is wired in. Worker is NOT deploy-ready — auto-decided security controls (Turnstile, Durable Object rate-limit, KV daily ceiling, kill switch, R2 cache) exist as TODO markers gated by the SECURITY.md checklist.
+- **`src/components/director/README.md`** — single-file pipeline overview; the year-from-now-start-here doc.
+- **`src/fixtures/directorScript.yadagiri.devotional.te.json`** — hand-authored Telugu narration for Yadagiri, 5 scenes / 30s.
+
+### Changed
+- `SurfaceRouter.jsx` adds `director` to `VALID_SURFACES`, lazy-loads `DirectorView`, and wires a toggle button. Full registry refactor (recommended by the DX reviewer) deferred to a follow-up commit to keep this diff scoped.
+- `package.json` → 1.6.0.
+
+### Auto-decided baseline (locked, even though not yet enforced in stub)
+1. Worker security: Turnstile + signed token + per-IP DO rate-limit + KV daily ceiling + R2 idempotency cache + env kill switch. Documented in `SECURITY.md` as the deploy gate.
+2. Color LUT applies per-frame in `colorGrade.js` (planned), NOT via raster basemap variants — `preserveDrawingBuffer` captures the WebGL framebuffer, not styled DOM, so CSS filters would not land in the MP4.
+3. Audio mixing path = `OfflineAudioContext` → single `AudioBuffer` → existing `encodeAacFromBuffer`. LUFS language dropped (Web Audio has no LUFS meter); target peak/RMS dBFS.
+4. `VITE_DIRECTOR_MOCK=1` + `window.speechSynthesis` fallback so the feature is testable without any API key.
+5. Per-line burned-in captions (not scene-boundary) — Instagram autoplay-muted is the dominant feed reality.
+
 ## [1.5.4] - 2026-05-13 — Reels layout cleanup + Export bulletproof
 
 ### Fixed
