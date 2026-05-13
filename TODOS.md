@@ -3,6 +3,20 @@
 Per-component / per-skill todos, ordered by priority (P0 = blocker, P4 = nice-to-have).
 Completed items move to the `## Completed` section at the bottom with the version they shipped in.
 
+## Post-v1.5.1 follow-ups
+
+### Atlas Compare All — dual-marker playback
+**Priority:** P3
+**What:** Today the Atlas "Compare all" tab renders both route lines simultaneously but the marker, elevation profile, postcards, and side panel still follow whichever single route was last selected. Add dual-marker playback (both routes' positions animate together against shared progress) and a paired elevation profile.
+**Why:** User feedback (v1.5.0 QA): "doesn't really compare — only one route plays." Same idea as `/?surface=compare` but inside Atlas for single-config multi-route configs like Tirupati.
+**Context:** Header now highlights both route tabs in compare mode (post-v1.5.1) so the user knows both are visible, but playback is still single-route. JourneyMap.jsx + ElevationProfile.jsx + SidePanels.jsx all need a "list of routes" pathway when compareRoutes is true.
+
+### Split-screen vertical compare
+**Priority:** P3
+**What:** A Reels-format variant of the compare surface — two 9:8 panels stacked in a 9:16 frame, sharing progress. Lets the user share a compare directly to social as a single MP4.
+**Why:** v1.5.0 ships compare on the wide Atlas map; this is its mobile/reels counterpart. User requested in v1.5.0 QA.
+**Context:** Needs a `?surface=split` route taking two memory IDs. Reel rendering already encapsulated in ReelPlayer.
+
 ## Reels
 
 ### Slice 6b — OpenRailwayMap polyline import for Konkan

@@ -30,17 +30,21 @@ export default function Header({
           ))}
         </div>
         <div className="jm-tabs">
-          {config.routes.map((r) => (
-            <button
-              key={r.id}
-              className={"jm-tab " + (!compareRoutes && r.id === activeRouteId ? "active" : "")}
-              onClick={() => onRouteChange(r.id)}
-              disabled={compareRoutes}
-              style={!compareRoutes && r.id === activeRouteId ? { boxShadow: `inset 0 -2px 0 ${r.color}` } : null}
-            >
-              {r.name}
-            </button>
-          ))}
+          {config.routes.map((r) => {
+            // In compareRoutes mode every route tab reads as 'selected' so
+            // the user can see both routes are showing simultaneously.
+            const isHighlighted = compareRoutes || r.id === activeRouteId;
+            return (
+              <button
+                key={r.id}
+                className={"jm-tab " + (isHighlighted ? "active" : "")}
+                onClick={() => onRouteChange(r.id)}
+                style={isHighlighted ? { boxShadow: `inset 0 -2px 0 ${r.color}` } : null}
+              >
+                {r.name}
+              </button>
+            );
+          })}
           {hasMultipleRoutes && (
             <button
               type="button"
@@ -48,7 +52,7 @@ export default function Header({
               onClick={() => onToggleCompareRoutes?.()}
               title="Show all routes side by side"
             >
-              Compare all
+              {compareRoutes ? "Comparing ✓" : "Compare all"}
             </button>
           )}
         </div>

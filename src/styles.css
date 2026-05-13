@@ -1327,8 +1327,13 @@ body {
  * ═════════════════════════════════════════════════════════════════ */
 
 .atlas-export {
-  position: relative;
+  position: fixed;
+  bottom: 16px;
+  left: 192px;
+  width: 160px;
+  z-index: 100;
 }
+.atlas-export .jm-surface-toggle { width: 100%; text-align: center; }
 .atlas-export-menu {
   position: absolute;
   bottom: 100%;
