@@ -1136,7 +1136,7 @@ body {
 .reel-basemap-btn:hover:not(.active) { color: #f4ede1; }
 .reel-recenter {
   position: absolute;
-  top: 64px;
+  top: 110px;
   right: 16px;
   padding: 8px 14px;
   background: rgba(20, 20, 24, 0.7);
@@ -1152,3 +1152,66 @@ body {
   z-index: 6;
 }
 .reel-recenter:hover { background: rgba(138, 69, 40, 0.9); }
+
+/* Camera mode picker (v3.3 Slice M) */
+.reel-cammode {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  gap: 4px;
+  background: rgba(20, 20, 24, 0.7);
+  backdrop-filter: blur(8px);
+  padding: 4px;
+  border-radius: 999px;
+  z-index: 6;
+}
+.reel-cammode-btn {
+  padding: 6px 10px;
+  font-family: "Manrope", system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(244, 237, 225, 0.7);
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.reel-cammode-btn.active { background: #1a6635; color: #f4ede1; }
+.reel-cammode-btn:hover:not(.active) { color: #f4ede1; }
+
+/* Best-moments chips (v3.3 Slice O) */
+.reel-chips {
+  position: absolute;
+  bottom: 88px;
+  left: 0;
+  right: 0;
+  padding: 0 12px;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  z-index: 5;
+}
+.reel-chips::-webkit-scrollbar { display: none; }
+.reel-chip {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  background: rgba(20, 20, 24, 0.75);
+  backdrop-filter: blur(8px);
+  color: rgba(244, 237, 225, 0.92);
+  border: 1px solid rgba(244, 237, 225, 0.18);
+  border-radius: 999px;
+  font-family: "Manrope", system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.reel-chip:hover { background: rgba(138, 69, 40, 0.85); color: #f4ede1; }
+.reel-chip-origin, .reel-chip-destination { color: #ffb84a; border-color: rgba(255, 184, 74, 0.35); }
+.reel-chip-peak-climb { color: #ff7755; border-color: rgba(255, 119, 85, 0.35); }
+.reel-chip-peak-stretch { color: #7ad6ff; border-color: rgba(122, 214, 255, 0.35); }

@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.0] - 2026-05-13 — Cadence wave (v3.3)
+
+The "right view at the right moment" wave from the v3.3 CEO brainstorm.
+
+### Added
+- `src/services/cameraModes.js` — four camera modes wrap the mood-cadence plan: **default** (passthrough), **birdseye** (pitch 0, baseZoom-2), **chase** (pitch 72, baseZoom+1.2), **orbit** (bearing rotates 360° over the loop). Pure `applyCameraMode` runs after `sampleCameraPlan` in the rAF loop. UI pill at top-right of the reel.
+- `src/services/moodCamera.js` — extended with `localSpeedFactor` (distance-per-t window, clamped 0..3) and `landmarkProximityFactor` (0..1 falloff 0.5km..3km from any landmark). `terrainHeuristic` now tightens zoom + tilts up near landmarks and damps pitch on fast straights. High-proximity beats get a 600ms hold.
+- `src/services/peakMoments.js` — pure `detectPeakMoments(config)` scans waypoints + landmarks for origin, destination, steepest 100m+ climb, longest single segment, and each landmark crossing. Dedupes within ±2% t. Renders as scrubbable chips below the timeline; tap to jump to that progress.
+- Tests: 289/289 (+31 — cameraModes ✕8, peakMoments ✕10, moodCamera adaptive ✕13).
+
 ## [1.3.0] - 2026-05-12 — Memory gallery + share URLs (v3.2)
 
 Composed memories can now be saved locally and shared via URL — no backend, no upload.
