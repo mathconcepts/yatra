@@ -1327,11 +1327,8 @@ body {
  * ═════════════════════════════════════════════════════════════════ */
 
 .atlas-export {
-  position: fixed;
-  bottom: 16px;
-  left: 192px;
-  width: 160px;
-  z-index: 100;
+  position: relative;
+  width: 100%;
 }
 .atlas-export .jm-surface-toggle { width: 100%; text-align: center; }
 .atlas-export-menu {
@@ -1367,4 +1364,68 @@ body {
 .atlas-export-menu .export-download {
   color: #ffb84a;
   border-color: rgba(255, 184, 74, 0.35);
+}
+
+/* Compare view toggle + split-screen (v1.5.2) */
+.compare-view-toggle {
+  display: flex;
+  gap: 2px;
+  background: rgba(42, 31, 18, 0.08);
+  padding: 3px;
+  border-radius: 6px;
+  margin-left: 16px;
+}
+.compare-view-toggle button {
+  padding: 6px 14px;
+  font-family: "Manrope", system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: rgba(42, 31, 18, 0.6);
+  cursor: pointer;
+}
+.compare-view-toggle button.active {
+  background: #8a4528;
+  color: #f4ede1;
+}
+.compare-split {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+}
+.compare-split-panel {
+  position: relative;
+  background: #0a141d;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 2px solid var(--panel-color, #ff9d3a);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.compare-split-label {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  z-index: 6;
+  background: rgba(20, 20, 24, 0.78);
+  color: var(--panel-color, #ff9d3a);
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-family: "Manrope", system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  backdrop-filter: blur(6px);
+}
+.compare-map-split {
+  flex: 1;
+  min-height: 0;
 }

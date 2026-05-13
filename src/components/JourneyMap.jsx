@@ -6,7 +6,6 @@ import Controls         from "./Controls";
 import ElevationProfile from "./ElevationProfile";
 import Postcard         from "./Postcard";
 import SidePanels       from "./SidePanels";
-import AtlasExportMenu  from "./AtlasExportMenu";
 
 import { fetchWeather }      from "../services/weather";
 import { interpolateRoute, distanceKm } from "../utils/route";
@@ -14,7 +13,7 @@ import { interpolateRoute, distanceKm } from "../utils/route";
 const ANIM_SECONDS_PER_FULL_RUN = 17;  // base; divided by speed
 const LANDMARK_TRIGGER_KM = 0.4;       // within 400 m → postcard
 
-export default function JourneyMap({ config }) {
+export default function JourneyMap({ config, mapRef: externalMapRef }) {
   const [basemap,  setBasemap]   = useState(config.topography.basemap);
   const [routeId,  setRouteId]   = useState(config.routes[0].id);
   const [compareRoutes, setCompareRoutes] = useState(false);
@@ -27,7 +26,8 @@ export default function JourneyMap({ config }) {
 
   const route = config.routes.find((r) => r.id === routeId);
   const acc   = config.culture.accentColor;
-  const mapRef = useRef(null);
+  const localMapRef = useRef(null);
+  const mapRef = externalMapRef || localMapRef;
 
   /* fetch weather once per location */
   useEffect(() => {
@@ -155,8 +155,6 @@ export default function JourneyMap({ config }) {
         accentColor={acc}
         onClose={() => setPostcard(null)}
       />
-
-      <AtlasExportMenu mapRef={mapRef} config={config} />
     </div>
   );
 }
