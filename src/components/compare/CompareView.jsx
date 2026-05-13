@@ -48,6 +48,7 @@ export default function CompareView({ locations, onCancel }) {
   const [progress, setProgress] = useState(0);
   const [playing, setPlaying] = useState(true);
   const [view, setView] = useState("overlay"); // "overlay" | "split"
+  const [basemap, setBasemap] = useState("topo"); // shared across both maps
 
   const a = allChoices.find((c) => c.key === aKey)?.config;
   const b = allChoices.find((c) => c.key === bKey)?.config;
@@ -99,6 +100,16 @@ export default function CompareView({ locations, onCancel }) {
             onClick={() => setView("split")}
           >Split</button>
         </div>
+        <div className="compare-view-toggle" role="group" aria-label="Basemap">
+          {["topo", "imagery", "relief"].map((b) => (
+            <button
+              key={b}
+              type="button"
+              className={basemap === b ? "active" : ""}
+              onClick={() => setBasemap(b)}
+            >{b}</button>
+          ))}
+        </div>
         <button type="button" className="composer-cancel" onClick={onCancel}>×</button>
       </header>
 
@@ -119,11 +130,11 @@ export default function CompareView({ locations, onCancel }) {
 
       <div className="compare-main">
         {view === "overlay" ? (
-          <OverlayMap a={a} b={b} progress={progress} />
+          <OverlayMap key={`ovl-${aKey}-${bKey}-${basemap}`} a={a} b={b} progress={progress} basemap={basemap} />
         ) : (
           <div className="compare-split">
-            <SingleMap key={`a-${aKey}`} config={a} color={COLORS[0]} progress={progress} label="A" />
-            <SingleMap key={`b-${bKey}`} config={b} color={COLORS[1]} progress={progress} label="B" />
+            <SingleMap key={`a-${aKey}-${basemap}`} config={a} color={COLORS[0]} progress={progress} label="A" basemap={basemap} />
+            <SingleMap key={`b-${bKey}-${basemap}`} config={b} color={COLORS[1]} progress={progress} label="B" basemap={basemap} />
           </div>
         )}
         {stats && (
@@ -168,7 +179,7 @@ function CompareRow({ label, a, b, delta }) {
 }
 
 /* ─── overlay map: both routes on one canvas ────────────────────────── */
-function OverlayMap({ a, b, progress }) {
+function OverlayMap({ a, b, progress, basemap = "topo" }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const markersRef = useRef([null, null]);
@@ -179,7 +190,7 @@ function OverlayMap({ a, b, progress }) {
     if (!u) return;
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: makeMapStyle("topo"),
+      style: makeMapStyle(basemap),
       bounds: [[u.lonMin, u.latMin], [u.lonMax, u.latMax]],
       fitBoundsOptions: { padding: 60 },
       attributionControl: { compact: true },
@@ -234,7 +245,7 @@ function OverlayMap({ a, b, progress }) {
 }
 
 /* ─── single map: one journey, for split view ───────────────────────── */
-function SingleMap({ config, color, progress, label }) {
+function SingleMap({ config, color, progress, label, basemap = "topo" }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const markerRef = useRef(null);
@@ -243,7 +254,7 @@ function SingleMap({ config, color, progress, label }) {
     if (!config || mapRef.current) return;
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: makeMapStyle(config.topography?.basemap || "topo"),
+      style: makeMapStyle(basemap),
       bounds: [[config.bounds.lonMin, config.bounds.latMin], [config.bounds.lonMax, config.bounds.latMax]],
       fitBoundsOptions: { padding: 40 },
       attributionControl: { compact: true },

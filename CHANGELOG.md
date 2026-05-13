@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.3] - 2026-05-13 — QA pass on v1.5.2
+
+### Fixed
+- **Atlas Export dropdown opened upward and overlapped the toggle column.** Moved the menu to open to the RIGHT of the Export button (`left: 100%; bottom: 0`) so it no longer covers Compose memory / My memories / Compare / Reels mode. Background bumped to 98% opacity + z-index 200.
+- **Compare view had no basemap selector.** Added a Topo / Imagery / Relief pill to the Compare header that drives both overlay and split views. Defaults to Topo.
+- **Split-view basemaps inherited each config's default**, so a Tirupati + Yadagiri compare showed one topo + one imagery panel without user choice. Now both panels honor the single shared basemap selection.
+
 ## [1.5.2] - 2026-05-13 — QA pass on v1.5.1
 
 User-reported issues from the second QA round.
