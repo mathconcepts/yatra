@@ -147,10 +147,13 @@ export default function ReelPlayer({ config }) {
             });
           }
         }
-      } else if (now - lastOffscreenCheckRef.current > 800) {
+      } else if (cameraModeRef.current === "default" && now - lastOffscreenCheckRef.current > 800) {
         // Manual mode: every ~800ms, if the marker has drifted outside
         // the visible viewport, ease it back into view without flipping
         // mode. The throttle prevents fighting an in-progress easeTo.
+        // Skip when camera mode is non-default — bird/orbit/chase use
+        // tilted frames where the marker may legitimately be off-center,
+        // and easeTo would fight the user's camera intent.
         lastOffscreenCheckRef.current = now;
         const map = mapRef.current;
         if (map && map.getBounds) {
@@ -248,55 +251,52 @@ export default function ReelPlayer({ config }) {
         <h2 className="reel-title">{config.title}</h2>
       </div>
 
-      <AutoCameraPill
-        mode={interactionMode}
-        manualKey={manualKey}
-        onToggle={togglePill}
-      />
-
-      <div className="reel-basemap" role="group" aria-label="Basemap">
-        {[
-          ["topo", "Topo"],
-          ["imagery", "Imagery"],
-          ["relief", "Relief"],
-        ].map(([id, label]) => (
+      <div className="reel-toolbar">
+        <AutoCameraPill
+          mode={interactionMode}
+          manualKey={manualKey}
+          onToggle={togglePill}
+        />
+        {interactionMode === "manual" && (
           <button
-            key={id}
             type="button"
-            className={`reel-basemap-btn${basemap === id ? " active" : ""}`}
-            onClick={() => setBasemap(id)}
-            aria-pressed={basemap === id}
-          >
-            {label}
-          </button>
-        ))}
+            className="reel-toolbar-btn reel-toolbar-recenter"
+            onClick={recenter}
+            aria-label="Recenter on current journey position"
+            title="Recenter on marker"
+          >⊙</button>
+        )}
       </div>
 
-      <div className="reel-cammode" role="group" aria-label="Camera mode">
-        {CAMERA_MODES.map((m) => (
-          <button
-            key={m}
-            type="button"
-            className={`reel-cammode-btn${cameraMode === m ? " active" : ""}`}
-            onClick={() => setCameraMode(m)}
-            aria-pressed={cameraMode === m}
-            title={CAM_MODE_LABELS[m]}
-          >
-            {CAM_MODE_LABELS[m]}
-          </button>
-        ))}
+      <div className="reel-control-strip" role="group" aria-label="Map controls">
+        <div className="reel-control-group" role="group" aria-label="Basemap">
+          {[
+            ["topo", "Topo"],
+            ["imagery", "Imagery"],
+            ["relief", "Relief"],
+          ].map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              className={`reel-control-btn${basemap === id ? " active" : ""}`}
+              onClick={() => setBasemap(id)}
+              aria-pressed={basemap === id}
+            >{label}</button>
+          ))}
+        </div>
+        <div className="reel-control-group reel-control-group-cam" role="group" aria-label="Camera mode">
+          {CAMERA_MODES.map((m) => (
+            <button
+              key={m}
+              type="button"
+              className={`reel-control-btn reel-control-btn-cam${cameraMode === m ? " active" : ""}`}
+              onClick={() => setCameraMode(m)}
+              aria-pressed={cameraMode === m}
+              title={CAM_MODE_LABELS[m]}
+            >{CAM_MODE_LABELS[m]}</button>
+          ))}
+        </div>
       </div>
-
-      {interactionMode === "manual" && (
-        <button
-          type="button"
-          className="reel-recenter"
-          onClick={recenter}
-          aria-label="Recenter on current journey position"
-        >
-          ⊙ Recenter
-        </button>
-      )}
 
       {activeLandmark && (
         <div
