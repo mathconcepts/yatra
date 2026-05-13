@@ -29,6 +29,7 @@ import maplibregl from "maplibre-gl";
 import { makeMapStyle } from "./basemapStyles";
 import { planCamera, sampleCameraPlan } from "./moodCamera";
 import { interpolateRoute } from "../utils/route";
+import { composeFrame } from "./sceneComposer";
 
 const RENDER_WIDTH = 720;
 const RENDER_HEIGHT = 1280;
@@ -54,14 +55,63 @@ export function cameraForT(config, t) {
 }
 
 /**
+ * Wrap a raw `captureFrame(t)` function with director-mode
+ * post-processing: source frame is drawn onto a working canvas,
+ * color-graded by the palette's LUT, then the active scene's caption is
+ * burned in. Returns a new ImageBitmap of the composited result.
+ *
+ * Pure factory — dependencies injected so this works in jsdom tests.
+ * Production callers pass `createCanvas = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }`
+ * and `createBitmap = createImageBitmap`.
+ */
+export function wrapCaptureWithDirector(captureFrame, {
+  scenes,
+  palette,
+  language,
+  durationS,
+  width = RENDER_WIDTH,
+  height = RENDER_HEIGHT,
+  createCanvas,
+  createBitmap,
+  composeFn = composeFrame,
+}) {
+  if (typeof captureFrame !== "function") throw new Error("wrapCaptureWithDirector: captureFrame fn required");
+  if (!palette) throw new Error("wrapCaptureWithDirector: palette required");
+  if (!language) throw new Error("wrapCaptureWithDirector: language required");
+  if (!Array.isArray(scenes)) throw new Error("wrapCaptureWithDirector: scenes array required");
+  if (typeof durationS !== "number" || durationS <= 0) {
+    throw new Error("wrapCaptureWithDirector: durationS must be > 0");
+  }
+  if (typeof createCanvas !== "function") throw new Error("wrapCaptureWithDirector: createCanvas required");
+  if (typeof createBitmap !== "function") throw new Error("wrapCaptureWithDirector: createBitmap required");
+
+  const working = createCanvas(width, height);
+  const ctx = working.getContext("2d");
+
+  return async function directorCapture(t) {
+    const sourceFrame = await captureFrame(t);
+    const tSeconds = Math.max(0, Math.min(1, t)) * durationS;
+    composeFn(ctx, { sourceFrame, scenes, tSeconds, palette, language });
+    return createBitmap(working);
+  };
+}
+
+/**
  * Spin up the offscreen renderer. Resolves once the style has loaded so
  * the very first captureFrame() call is fast.
+ *
+ * If `directorMode` is provided (with `{ scenes, palette, language, durationS }`),
+ * every returned frame is post-processed via `composeFrame` — color
+ * graded and caption-burned. When absent, captureFrame returns the raw
+ * map snapshot exactly as before. Reels live preview and the existing
+ * Composer export path stay on the raw path; the Director surface opts in.
  */
 export async function createOffscreenReelRenderer(config, {
   width = RENDER_WIDTH,
   height = RENDER_HEIGHT,
   basemap,
   idleTimeoutMs = 1500,
+  directorMode = null,
 } = {}) {
   if (typeof document === "undefined") {
     throw new Error("Offscreen renderer requires a DOM");
@@ -126,13 +176,28 @@ export async function createOffscreenReelRenderer(config, {
   // Wait for first idle so initial tiles paint before captureFrame.
   await _waitIdle(map, idleTimeoutMs);
 
-  const captureFrame = async (t) => {
+  const rawCapture = async (t) => {
     const cam = cameraForT(config, t);
     if (cam) map.jumpTo(cam);
     await _waitIdle(map, idleTimeoutMs);
     const canvas = map.getCanvas();
     return await createImageBitmap(canvas);
   };
+
+  const captureFrame = directorMode
+    ? wrapCaptureWithDirector(rawCapture, {
+        ...directorMode,
+        width,
+        height,
+        createCanvas: (w, h) => {
+          const c = document.createElement("canvas");
+          c.width = w;
+          c.height = h;
+          return c;
+        },
+        createBitmap: (src) => createImageBitmap(src),
+      })
+    : rawCapture;
 
   const destroy = () => {
     try { map.remove(); } catch { /* */ }

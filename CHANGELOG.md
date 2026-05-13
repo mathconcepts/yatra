@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.2] - 2026-05-13 — AI Cinematographer Step 2b: wire compositor into reelRenderer (opt-in)
+
+Low-risk opt-in wiring of the v1.6.1 compositor into the existing offscreen reel renderer.
+Existing call sites unchanged — when `directorMode` is absent (everywhere today), `captureFrame`
+returns the raw map snapshot exactly as before. When `directorMode` is provided, every frame
+is graded + caption-burned before encoding.
+
+### Added
+- **`wrapCaptureWithDirector(captureFrame, {scenes, palette, language, durationS, ...})`** in `src/services/reelRenderer.js`. Pure factory; dependencies (`createCanvas`, `createBitmap`, optional `composeFn`) injected for testability. Reuses one working canvas across all frames in a render. Clamps `t` to `[0, 1]` and maps to absolute seconds via `durationS`.
+- **`directorMode` option** on `createOffscreenReelRenderer(config, {directorMode})`. When set, the rendered `captureFrame` is wrapped. Production passes browser `createImageBitmap` + a real HTMLCanvasElement factory.
+
+### Tests
+- 6 new tests in `test/reel-renderer.test.js` covering: wrapper output shape, canvas reuse across frames, t→seconds mapping + clamping, error propagation from the underlying capture, and input validation. Total: 371/371.
+
+### What this unblocks
+The Director surface can now ask the renderer for graded+captioned frames in one call. Next step (audio mixing + Worker Claude wiring) plugs into this without touching the renderer again.
+
 ## [1.6.1] - 2026-05-13 — AI Cinematographer Step 2a: per-frame compositor (color grade + caption burn-in)
 
 Two of the auto-decided items from /autoplan land as pure helpers, fully tested in jsdom.
