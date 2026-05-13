@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import Header           from "./Header";
 import MapView          from "./MapView";
@@ -6,6 +6,7 @@ import Controls         from "./Controls";
 import ElevationProfile from "./ElevationProfile";
 import Postcard         from "./Postcard";
 import SidePanels       from "./SidePanels";
+import AtlasExportMenu  from "./AtlasExportMenu";
 
 import { fetchWeather }      from "../services/weather";
 import { interpolateRoute, distanceKm } from "../utils/route";
@@ -16,6 +17,7 @@ const LANDMARK_TRIGGER_KM = 0.4;       // within 400 m → postcard
 export default function JourneyMap({ config }) {
   const [basemap,  setBasemap]   = useState(config.topography.basemap);
   const [routeId,  setRouteId]   = useState(config.routes[0].id);
+  const [compareRoutes, setCompareRoutes] = useState(false);
   const [progress, setProgress]  = useState(0);
   const [playing,  setPlaying]   = useState(false);
   const [speed,    setSpeed]     = useState(1);
@@ -25,6 +27,7 @@ export default function JourneyMap({ config }) {
 
   const route = config.routes.find((r) => r.id === routeId);
   const acc   = config.culture.accentColor;
+  const mapRef = useRef(null);
 
   /* fetch weather once per location */
   useEffect(() => {
@@ -100,7 +103,9 @@ export default function JourneyMap({ config }) {
       <Header
         config={config}
         basemap={basemap} onBasemapChange={setBasemap}
-        activeRouteId={routeId} onRouteChange={setRouteId}
+        activeRouteId={routeId} onRouteChange={(id) => { setRouteId(id); setCompareRoutes(false); }}
+        compareRoutes={compareRoutes}
+        onToggleCompareRoutes={() => setCompareRoutes((v) => !v)}
       />
 
       <div className="jm-grid">
@@ -113,6 +118,8 @@ export default function JourneyMap({ config }) {
               currentPos={here}
               isJourneyActive={playing || progress > 0}
               onLandmarkClick={handleLandmarkClick}
+              compareRoutes={compareRoutes}
+              onMapReady={(map) => { mapRef.current = map; }}
             />
             <Controls
               playing={playing}
@@ -148,6 +155,8 @@ export default function JourneyMap({ config }) {
         accentColor={acc}
         onClose={() => setPostcard(null)}
       />
+
+      <AtlasExportMenu mapRef={mapRef} config={config} />
     </div>
   );
 }

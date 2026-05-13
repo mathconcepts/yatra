@@ -30,6 +30,7 @@ export default function MapView({
   enablePerfProbe = false,
   mobileTerrainCap,        // optional number, e.g. 1.3 — clamps terrainExaggeration
   freeCamera = false,      // skip maxBounds — Reels surface needs unconstrained pitch
+  compareRoutes = false,   // show all routes equally weighted (Atlas v3.4 P7)
 }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
@@ -254,20 +255,21 @@ export default function MapView({
     const map = mapRef.current;
     if (!map || !isStyleLoadedRef.current) return;
     config.routes.forEach((route) => {
-      const isActive = route.id === activeRouteId;
+      // compareRoutes = all routes equally weighted (P7).
+      const isActive = compareRoutes || route.id === activeRouteId;
       const mainId = `route-line-${route.id}`;
       const glowId = `route-glow-${route.id}`;
       if (map.getLayer(mainId)) {
         map.setPaintProperty(mainId, "line-width", isActive ? 4.5 : 2.5);
         map.setPaintProperty(mainId, "line-opacity", isActive ? 1 : 0.55);
-        map.setPaintProperty(mainId, "line-dasharray", isActive ? [1, 0] : [2, 1.5]);
+        map.setPaintProperty(mainId, "line-dasharray", compareRoutes ? [1, 0] : (isActive ? [1, 0] : [2, 1.5]));
       }
       if (map.getLayer(glowId)) {
         map.setPaintProperty(glowId, "line-width", isActive ? 14 : 8);
         map.setPaintProperty(glowId, "line-opacity", isActive ? 0.25 : 0.1);
       }
     });
-  }, [activeRouteId, config.routes]);
+  }, [activeRouteId, config.routes, compareRoutes]);
 
   /* ─── react to current position change (move marker) ──────────────── */
   useEffect(() => {

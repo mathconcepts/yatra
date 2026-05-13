@@ -37,6 +37,20 @@ Completed items move to the `## Completed` section at the bottom with the versio
 **Context:** `workers/bhuvan-proxy/README.md` has the deploy + smoke-test recipe.
 **Depends on:** Cloudflare account access.
 
+## v3.4 deferred (from Wave C cuts)
+
+### P4 — Split-screen vertical reels
+**Priority:** P3
+**What:** A new Reels variant that stacks two ReelPlayers as two 9:8 panels in a 9:16 frame, sharing progress. Useful for journey-vs-journey playback as a reel-format share.
+**Why:** v3.4 ships journey compare on a wide Atlas map; this is its mobile/reels counterpart.
+**Context:** Needs a `?surface=split` route taking two memory IDs. Reel rendering already encapsulated in ReelPlayer.
+
+### Animated GIF export
+**Priority:** P3
+**What:** Add GIF format to exportRouter. Use gif.js (~30KB gzipped) or omggif. Render frames same as MP4, encode to palette-quantized GIF.
+**Why:** WhatsApp + group chat default. MP4 doesn't auto-play in many chat clients; GIF does.
+**Context:** `exportRouter.js validateFormat` already rejects "gif" — flip when implemented.
+
 ## Reels v3.1 (deferred from v3.0 plan)
 
 ### Memory composer surface
