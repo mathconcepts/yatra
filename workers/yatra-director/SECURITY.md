@@ -13,7 +13,7 @@ billing account. This doc is the enforcement checklist.
 Do not deploy to a public URL until every item is `[x]`.
 
 - [ ] `wrangler secret put TURNSTILE_SECRET_KEY` provisioned
-- [ ] Turnstile siteverify enforced in `/v1/script` and `/v1/tts` (currently TODO)
+- [x] Turnstile siteverify enforced in `/v1/script` and `/v1/tts` (wired in `src/index.js`; activates once `TURNSTILE_SECRET_KEY` is provisioned, otherwise bypassed for keyless local dev)
 - [ ] `wrangler secret put ANTHROPIC_API_KEY` provisioned
 - [ ] `wrangler secret put GOOGLE_TTS_API_KEY` provisioned (restricted to Cloud Text-to-Speech API on the GCP project)
 - [ ] CORS allowlist contains only known origins (no `*`, no `null`)

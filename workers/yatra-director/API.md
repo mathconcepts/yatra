@@ -195,13 +195,14 @@ npm install
 cp wrangler.toml.example wrangler.toml   # then fill in your account id
 wrangler secret put ANTHROPIC_API_KEY
 wrangler secret put TURNSTILE_SECRET_KEY
-wrangler secret put ELEVENLABS_API_KEY  # optional, gated behind tts feature flag
+wrangler secret put GOOGLE_TTS_API_KEY
 wrangler dev --local --persist
 ```
 
-Edit prompts under `prompts/<tone>.md` — the dev server hot-reloads them.
-Run `npm run prompt -- devotional te` to POST a fixture request and pretty-print
-the resulting scene list (sub-2s edit→see loop).
+Edit prompts under `prompts/<tone>.md` — they are the human-editable source
+of truth. The JS-bundle copy lives in `src/prompts.js` and must be kept
+in sync by hand (a future `scripts/sync-prompts.mjs` build step will
+read the `.md` files into the exports object automatically).
 
 ---
 
