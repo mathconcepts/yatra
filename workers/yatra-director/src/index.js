@@ -27,18 +27,33 @@ import { SYSTEM_PROMPTS } from "./prompts.js";
 
 const TOTAL_DURATION_S = 30;
 
-const CORS_ALLOWLIST = [
+// Origin allowlist. Strings match exactly; RegExp values are tested.
+// Pages preview deploys land on per-hash *.yatra.pages.dev subdomains,
+// which is why the regex form is here.
+const CORS_PATTERNS = [
   "http://localhost:5173",
   "http://localhost:8787",
-  // Add prod origins here once we have them.
+  /^https:\/\/[a-z0-9-]+\.yatra\.pages\.dev$/,
+  // Add production custom domain here once configured, e.g.:
+  // "https://yatra.<your-domain>",
 ];
 
+export function isOriginAllowed(origin, patterns = CORS_PATTERNS) {
+  if (!origin) return false;
+  for (const p of patterns) {
+    if (typeof p === "string" && p === origin) return true;
+    if (p instanceof RegExp && p.test(origin)) return true;
+  }
+  return false;
+}
+
 function corsHeaders(origin) {
-  const allow = CORS_ALLOWLIST.includes(origin) ? origin : "null";
+  const allow = isOriginAllowed(origin) ? origin : "null";
   return {
     "Access-Control-Allow-Origin": allow,
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, X-Yatra-Turnstile",
+    // X-Yatra-User-TTS-Key is the BYOK header for /v1/tts; absent → operator path.
+    "Access-Control-Allow-Headers": "Content-Type, X-Yatra-Turnstile, X-Yatra-User-TTS-Key",
     "Vary": "Origin",
   };
 }
@@ -61,7 +76,7 @@ function reqId() {
  *
  * Kill switch is checked first because it's the cheapest exit.
  */
-async function preflight({ request, env, origin, id, route, body, cost = null }) {
+async function preflight({ request, env, origin, id, route, body, cost = null, bypassTurnstile = false, bypassBudget = false }) {
   // 1. Kill switch — operator can flip this to halt all paid work.
   if (env?.DIRECTOR_KILLSWITCH === "1") {
     return jsonResponse(
@@ -81,8 +96,9 @@ async function preflight({ request, env, origin, id, route, body, cost = null })
   // 2. Turnstile — required when TURNSTILE_SECRET_KEY is provisioned.
   // For dev environments without the secret, the gate is bypassed so
   // local iteration stays fast. SECURITY.md gates production deploy on
-  // the secret being set.
-  if (env?.TURNSTILE_SECRET_KEY) {
+  // the secret being set. BYOK calls also bypass (user pays their own
+  // quota; rate-limit DO still gates abuse).
+  if (env?.TURNSTILE_SECRET_KEY && !bypassTurnstile) {
     const token = request.headers.get("X-Yatra-Turnstile") || "";
     if (!token) {
       return jsonResponse(
@@ -170,9 +186,11 @@ async function preflight({ request, env, origin, id, route, body, cost = null })
     }
   }
 
-  // 3. Daily budget — bypassed when BUDGET_KV is not bound. The cap is
-  // set via env.DIRECTOR_DAILY_CAP_MILLICENTS (defaults to 500_000 = $5).
-  if (env?.BUDGET_KV) {
+  // 3. Daily budget — bypassed when BUDGET_KV is not bound or when this
+  // is a BYOK request (user pays their own provider quota, not ours).
+  // The cap is set via env.DIRECTOR_DAILY_CAP_MILLICENTS (defaults to
+  // 500_000 = $5).
+  if (env?.BUDGET_KV && !bypassBudget) {
     const cap = Number(env.DIRECTOR_DAILY_CAP_MILLICENTS);
     const check = await checkBudget({
       kv: env.BUDGET_KV,
@@ -423,60 +441,81 @@ async function handleTts(request, env, origin) {
     );
   }
 
-  if (!env?.GOOGLE_TTS_API_KEY) {
+  // BYOK: if the client supplied their own Google TTS key, use it and
+  // skip Turnstile + budget + cache. Per-IP rate limit still applies as
+  // abuse defense (Worker CPU is not free even when upstream is on the
+  // user's quota). The header is never logged — see SECURITY.md.
+  const userTtsKey = request.headers.get("X-Yatra-User-TTS-Key") || "";
+  const isBYOK = userTtsKey.length > 0;
+  const effectiveTtsKey = isBYOK ? userTtsKey : env?.GOOGLE_TTS_API_KEY;
+
+  if (!effectiveTtsKey) {
     return jsonResponse(
       503,
       problem({
         slug: "tts-not-configured",
         title: "Google TTS API key not set",
         status: 503,
-        detail: "GOOGLE_TTS_API_KEY has not been provisioned on the Worker.",
-        fix: "wrangler secret put GOOGLE_TTS_API_KEY (free tier: enable Cloud Text-to-Speech API on a GCP project, create an API key restricted to that API).",
+        detail: "GOOGLE_TTS_API_KEY has not been provisioned on the Worker and no BYOK key was supplied.",
+        fix: "Either: (operator) wrangler secret put GOOGLE_TTS_API_KEY; (user) paste your key in Settings.",
         requestId: id,
       }),
       origin,
     );
   }
 
-  // Pre-flight: kill switch + Turnstile + budget.
-  const blocked = await preflight({ request, env, origin, id, route: "/v1/tts", body });
+  // Pre-flight: kill switch + Turnstile + budget. BYOK bypasses Turnstile
+  // and budget; the rate-limit DO still runs to protect Worker CPU.
+  const blocked = await preflight({
+    request, env, origin, id,
+    route: "/v1/tts", body,
+    bypassTurnstile: isBYOK,
+    bypassBudget: isBYOK,
+  });
   if (blocked) return blocked;
 
-  // Idempotency cache lookup — by content fingerprint, not the raw text.
-  const cacheKey = await buildTtsCacheKey({ voiceId, tempo, text, language });
-  const cachedAudio = await getCached(env?.TTS_CACHE, cacheKey, { as: "arrayBuffer" });
-  if (cachedAudio) {
-    return new Response(cachedAudio, {
-      status: 200,
-      headers: {
-        "Content-Type": "audio/mpeg",
-        "X-Yatra-Provider": "google-tts",
-        "X-Yatra-Cache": "hit",
-        ...corsHeaders(origin),
-      },
-    });
+  // Idempotency cache — operator path only. BYOK calls neither read nor
+  // write the cache: muddles operator's accounting and risks cross-user
+  // payload reuse. User pays each call.
+  let cacheKey = null;
+  if (!isBYOK) {
+    cacheKey = await buildTtsCacheKey({ voiceId, tempo, text, language });
+    const cachedAudio = await getCached(env?.TTS_CACHE, cacheKey, { as: "arrayBuffer" });
+    if (cachedAudio) {
+      return new Response(cachedAudio, {
+        status: 200,
+        headers: {
+          "Content-Type": "audio/mpeg",
+          "X-Yatra-Provider": "google-tts",
+          "X-Yatra-Cache": "hit",
+          ...corsHeaders(origin),
+        },
+      });
+    }
   }
 
   try {
     const audio = await callGoogleTTS({
-      apiKey: env.GOOGLE_TTS_API_KEY,
+      apiKey: effectiveTtsKey,
       text,
       voiceId,
       language,
       tempo,
     });
-    // Record spend + cache the audio. Both swallow errors.
-    if (env?.BUDGET_KV) {
-      const c = await checkBudget({ kv: env.BUDGET_KV, route: "/v1/tts", body });
-      await recordSpend(env.BUDGET_KV, c.key, c.cost);
+    // Operator path only: record spend + cache. BYOK skips both.
+    if (!isBYOK) {
+      if (env?.BUDGET_KV) {
+        const c = await checkBudget({ kv: env.BUDGET_KV, route: "/v1/tts", body });
+        await recordSpend(env.BUDGET_KV, c.key, c.cost);
+      }
+      await putCached(env?.TTS_CACHE, cacheKey, audio, { as: "arrayBuffer" });
     }
-    await putCached(env?.TTS_CACHE, cacheKey, audio, { as: "arrayBuffer" });
     return new Response(audio, {
       status: 200,
       headers: {
         "Content-Type": "audio/mpeg",
         "X-Yatra-Provider": "google-tts",
-        "X-Yatra-Cache": "miss",
+        "X-Yatra-Cache": isBYOK ? "byok-bypass" : "miss",
         ...corsHeaders(origin),
       },
     });
@@ -512,8 +551,8 @@ export default {
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: corsHeaders(origin) });
     }
-    // CORS allowlist gate
-    if (origin && !CORS_ALLOWLIST.includes(origin)) {
+    // CORS allowlist gate (pattern-matched; supports *.yatra.pages.dev preview deploys)
+    if (origin && !isOriginAllowed(origin)) {
       return jsonResponse(
         403,
         problem({

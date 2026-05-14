@@ -102,11 +102,31 @@ end up in Cloudflare Logpush. NEVER log:
 - raw API responses (may echo prompts that contain user-uploaded photo paths or filenames)
 - request bodies (may contain GPX coords if we ever accept upload)
 - any header containing `key`, `token`, `secret`, `authorization`
+- any header matching `^X-Yatra-User-.*-Key$` (BYOK user-supplied keys — leaking
+  these would compromise the user's provider account, not just ours)
 
 DO log:
 
 - `requestId` (the UUID we generate)
 - route taken (`/v1/script` etc.)
 - status code returned
-- whether cache was hit/miss
+- whether cache was hit/miss / `byok-bypass`
 - error slug (never the full error chain)
+- whether the request was BYOK (`isBYOK=true|false`) — the BOOLEAN only, never the key
+
+## BYOK trust model
+
+When `X-Yatra-User-TTS-Key` is supplied on `/v1/tts`:
+
+- Worker uses the user's key, never the operator's.
+- Turnstile is BYPASSED (user pays their own provider quota; bot defense is the per-IP rate-limit DO).
+- Budget guard is BYPASSED (user pays).
+- Idempotency cache is BYPASSED — neither read nor write. Reasons: (1) cache keys hash content, not user, so a BYOK-paid result would otherwise become free for the next non-BYOK requester, muddying operator accounting; (2) defense against cache-poisoning a shared cache slot with a user-specific payload.
+- Per-IP rate limit STILL applies — Worker CPU is operator's resource regardless of upstream key.
+- The user's key is read into memory, forwarded once to the upstream provider in the same request, then dropped. Never persisted, never logged, never cached.
+
+For `/v1/script`, the Worker has NO Anthropic BYOK branch. Anthropic BYOK
+calls bypass the Worker entirely: the browser calls `api.anthropic.com`
+directly with `anthropic-dangerous-direct-browser-access: true`. The user's
+Anthropic key never touches our infrastructure. See
+`src/services/anthropicDirectClient.js`.
