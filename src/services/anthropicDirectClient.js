@@ -123,6 +123,18 @@ function looksLikeObject(s) {
   return s.startsWith("{") && s.endsWith("}");
 }
 
+/**
+ * Pure: turn full narration text into a short caption (≤6 words).
+ * Used as a last-resort fallback when the model emits narration but
+ * forgets captionText. Picks the first 4-6 words; strips trailing
+ * punctuation. Keeps the same script (Telugu / Hindi / Tamil / English).
+ */
+function narrationToCaption(narration) {
+  if (typeof narration !== "string") return "";
+  const words = narration.trim().split(/\s+/);
+  return words.slice(0, 6).join(" ").replace(/[.,;:!?]+$/, "");
+}
+
 export function parseClaudeResponse(rawText, { routeId, tone, language, totalDurationS }) {
   if (typeof rawText !== "string" || rawText.trim().length === 0) {
     throw new Error("Model returned empty body");
@@ -145,18 +157,26 @@ export function parseClaudeResponse(rawText, { routeId, tone, language, totalDur
     if (!Number.isFinite(tStart) || !Number.isFinite(tEnd) || tEnd <= tStart) {
       throw new Error(`scenes[${i}]: invalid tStart/tEnd (${s.tStart}, ${s.tEnd})`);
     }
-    if (typeof s.narration !== "string" || s.narration.length === 0) {
-      throw new Error(`scenes[${i}]: narration missing`);
-    }
-    if (typeof s.captionText !== "string") {
-      throw new Error(`scenes[${i}]: captionText missing`);
-    }
+    // Tolerant of partial scenes: a model that emits narration but
+    // forgets captionText, or vice versa, shouldn't fail the entire
+    // render. Fall back to whichever string is present, then to the
+    // scene id, then to a generic label.
+    const narration =
+      (typeof s.narration === "string" && s.narration.trim()) ||
+      (typeof s.captionText === "string" && s.captionText.trim()) ||
+      (typeof s.id === "string" && s.id) ||
+      `Scene ${i + 1}`;
+    const captionText =
+      (typeof s.captionText === "string" && s.captionText.trim()) ||
+      (typeof s.narration === "string" && narrationToCaption(s.narration)) ||
+      (typeof s.id === "string" && s.id) ||
+      `Scene ${i + 1}`;
     return {
       id: typeof s.id === "string" ? s.id : `scene-${i}`,
       tStart,
       tEnd,
-      narration: s.narration,
-      captionText: s.captionText,
+      narration,
+      captionText,
       captionStyle: s.captionStyle === "headline" ? "headline" : "subtitle",
     };
   });
