@@ -19,9 +19,10 @@
  */
 
 import { buildUserPrompt, parseClaudeResponse } from "./anthropicDirectClient.js";
+import { OPENROUTER_DEFAULT_MODEL } from "./openRouterCatalog.js";
 
 const ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
-const DEFAULT_MODEL = "anthropic/claude-3.5-sonnet";
+const DEFAULT_MODEL = OPENROUTER_DEFAULT_MODEL;
 const DEFAULT_MAX_TOKENS = 1024;
 const DEFAULT_TIMEOUT_MS = 20000;
 
@@ -110,6 +111,19 @@ export async function callOpenRouterDirect({
   }
   if (res.status === 402) {
     throw withCode("credits", "OpenRouter says you're out of credits — top up at openrouter.ai or pick a :free model");
+  }
+  if (res.status === 404) {
+    const detail = await safeText(res);
+    // OpenRouter returns 404 when the model slug has been retired or
+    // doesn't exist. Surface a fix-the-slug message instead of the
+    // generic "parse" code.
+    const isModelMiss = /No endpoints found|model/i.test(detail);
+    throw withCode(
+      isModelMiss ? "model-not-found" : "parse",
+      isModelMiss
+        ? `OpenRouter doesn't have model "${model}". Pick one of the chips or paste a current slug from openrouter.ai/models.`
+        : `OpenRouter 404: ${detail.slice(0, 240)}`,
+    );
   }
   if (res.status === 429) throw withCode("rate", "OpenRouter rate-limited the request");
   if (!res.ok) {

@@ -87,6 +87,16 @@ describe("callOpenRouterDirect", () => {
     ).rejects.toMatchObject({ code: "auth" });
   });
 
+  it("maps 404 with 'No endpoints found' to code='model-not-found'", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(mockResponse({
+      status: 404,
+      text: '{"error":{"message":"No endpoints found for some/old-model","code":404}}',
+    }));
+    await expect(
+      callOpenRouterDirect({ apiKey: "sk-or-x", model: "some/old-model", systemPrompt, body, fetchImpl })
+    ).rejects.toMatchObject({ code: "model-not-found" });
+  });
+
   it("maps 402 to code='credits'", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(mockResponse({ status: 402, text: "out of credits" }));
     await expect(
