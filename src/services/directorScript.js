@@ -13,6 +13,9 @@
  */
 
 import { detectPeakMoments } from "./peakMoments.js";
+import { readUserSettings } from "./userSettings.js";
+import { callAnthropicDirect } from "./anthropicDirectClient.js";
+import { getSystemPrompt, extractSystemPrompt } from "./directorPrompts.js";
 
 import yadagiriDevotionalTe from "../fixtures/directorScript.yadagiri.devotional.te.json";
 
@@ -92,9 +95,25 @@ export function suggestPersonalNote({ config, tone }) {
  * Fetch a directed script. Returns { scenes, meta }. Throws on transport
  * or schema failure; caller decides whether to retry only-this-stage.
  */
-export async function generateScript({ config, tone, language, personalContext = "", signal } = {}) {
+export async function generateScript({ config, tone, language, personalContext = "", signal, turnstileToken } = {}) {
   if (!config || !tone || !language) {
     throw new Error("generateScript requires {config, tone, language}");
+  }
+
+  const settings = readUserSettings();
+  const body = buildScriptRequest({ config, tone, language, personalContext });
+
+  // BYOK Anthropic: browser-direct to api.anthropic.com, bypassing our
+  // Worker entirely. Trust model: user's long-lived bearer never touches
+  // our infrastructure. See SECURITY.md "BYOK trust model".
+  if (settings.anthropicKey && !isMockMode()) {
+    const systemPrompt = getSystemPrompt(tone);
+    return callAnthropicDirect({
+      apiKey: settings.anthropicKey,
+      systemPrompt,
+      body,
+      signal,
+    });
   }
 
   if (isMockMode()) {
@@ -126,16 +145,19 @@ export async function generateScript({ config, tone, language, personalContext =
     };
   }
 
-  const base = getWorkerBase();
+  // Worker path (no BYOK Anthropic). Settings.workerUrl override wins
+  // over the build-time env URL.
+  const base = (settings.workerUrl && settings.workerUrl.trim()) || getWorkerBase();
   if (!base) {
     throw new Error(
-      "VITE_DIRECTOR_WORKER_URL is not set. Set it in .env.local or run with VITE_DIRECTOR_MOCK=1 for the canned fixture path.",
+      "VITE_DIRECTOR_WORKER_URL is not set. Set it in .env.local, override it in Settings, or run with VITE_DIRECTOR_MOCK=1 for the canned fixture path.",
     );
   }
-  const body = buildScriptRequest({ config, tone, language, personalContext });
+  const headers = { "content-type": "application/json" };
+  if (turnstileToken) headers["X-Yatra-Turnstile"] = turnstileToken;
   const res = await fetch(`${base.replace(/\/$/, "")}/v1/script`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers,
     body: JSON.stringify(body),
     signal,
   });

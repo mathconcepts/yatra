@@ -103,15 +103,20 @@ export async function synthesizeSceneLive(scene, {
   fetchImpl = globalThis.fetch,
   decodeAudio,
   signal,
+  userTtsKey,         // BYOK Google TTS key from userSettings
+  turnstileToken,     // Turnstile token captured by widget
 }) {
   if (!workerBase) throw new Error("synthesizeSceneLive: workerBase required (VITE_DIRECTOR_WORKER_URL)");
   if (typeof fetchImpl !== "function") throw new Error("synthesizeSceneLive: fetchImpl required");
   if (typeof decodeAudio !== "function") throw new Error("synthesizeSceneLive: decodeAudio required");
 
   const body = buildTtsRequest({ scene, palette, language });
+  const headers = { "content-type": "application/json" };
+  if (turnstileToken) headers["X-Yatra-Turnstile"] = turnstileToken;
+  if (userTtsKey) headers["X-Yatra-User-TTS-Key"] = userTtsKey;
   const res = await fetchImpl(`${workerBase.replace(/\/$/, "")}/v1/tts`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers,
     body: JSON.stringify(body),
     signal,
   });
@@ -159,6 +164,8 @@ export async function synthesizeScenes({
   fetchImpl,
   decodeAudio,
   signal,
+  userTtsKey,        // BYOK Google TTS key (forwarded to /v1/tts via header)
+  turnstileToken,    // Turnstile token from widget (omitted in dev / BYOK)
 } = {}) {
   if (!Array.isArray(scenes) || scenes.length === 0) {
     throw new Error("synthesizeScenes: scenes array required");
@@ -195,6 +202,8 @@ export async function synthesizeScenes({
       fetchImpl,
       decodeAudio,
       signal,
+      userTtsKey,
+      turnstileToken,
     });
     out.push(buf);
   }
