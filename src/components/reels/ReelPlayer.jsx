@@ -9,7 +9,7 @@ import AutoCameraPill from "./AutoCameraPill";
 
 const LOOP_SECONDS = 22;          // one full traversal
 const REACT_UPDATE_MS = 200;      // React re-render cadence for marker + UI
-const AUTO_RESUME_MS = 5000;      // 5 s no-touch → auto resumes
+const AUTO_RESUME_MS = 2500;      // 2.5 s no-touch → auto resumes (was 5s — felt sticky)
 const HAPTIC_MS = 30;             // tap-tick haptic on resume
 
 const CAM_MODE_LABELS = {
@@ -188,13 +188,24 @@ export default function ReelPlayer({ config }) {
 
   const handleMapReady = useCallback((map) => {
     mapRef.current = map;
-    // dragstart / pitchstart / rotatestart only fire on user gestures,
-    // not on programmatic map.jumpTo. Wheel zoom also opts in.
-    const onUserInput = () => enterManual();
-    map.on("dragstart", onUserInput);
-    map.on("pitchstart", onUserInput);
-    map.on("rotatestart", onUserInput);
-    map.on("wheel", onUserInput);
+    // Only flip to manual on REAL user gestures. MapLibre fires
+    // pitchstart/zoomstart/movestart for BOTH user input and our
+    // programmatic jumpTo calls in the rAF loop — relying on those
+    // alone would lock us in manual every frame. The reliable signal
+    // is `event.originalEvent`: present for mouse/touch/wheel, absent
+    // for programmatic moves.
+    //
+    // dragstart is the safest channel (gesture-only); we use it as
+    // the primary trigger, with the other events as backups that
+    // check originalEvent before flipping.
+    const onUserGesture = (e) => {
+      if (!e || !e.originalEvent) return; // programmatic — ignore
+      enterManual();
+    };
+    map.on("dragstart", () => enterManual());
+    map.on("pitchstart", onUserGesture);
+    map.on("rotatestart", onUserGesture);
+    map.on("zoomstart", onUserGesture);
   }, [enterManual]);
 
   const handleProgressScrub = (e) => {
