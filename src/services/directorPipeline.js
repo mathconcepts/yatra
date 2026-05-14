@@ -77,6 +77,10 @@ export async function runDirectorPipeline({
   personalContext = "",
   basemap, // "topo" | "imagery" | "relief"; undefined → config default
   routeVariantId = null, // which config.routes[].id (e.g. "alipiri" / "srivari"); undefined → first route
+  mode = "point-to-point", // "point-to-point" (existing) | "tour" (Yatra v1.8, multi-POI circuit)
+  tourId = null,          // when mode==="tour", which config.tours[].id is being directed
+  coverageWeights = null, // tour-mode timing: "equal" | "single:<poiId>" | { [poiId]: number }
+  totalDurationS = 30,    // video duration in seconds. Configurable (15/30/60/90); 30 by default.
   voiceOverride = null,  // Google TTS voice id chosen by user in the wizard; undefined → palette default
   turnstileToken = null, // Cloudflare Turnstile token from widget; forwarded to Worker calls
   fps = DEFAULT_FPS,
@@ -105,15 +109,19 @@ export async function runDirectorPipeline({
 
   // 1. Script
   emit("script", { message: "Composing the narration" });
-  const script = await generate({ config, tone: palette.id, language, personalContext, routeVariantId, turnstileToken, signal });
+  const script = await generate({
+    config, tone: palette.id, language, personalContext,
+    routeVariantId, mode, tourId, coverageWeights, totalDurationS,
+    turnstileToken, signal,
+  });
   const scenes = script?.scenes || [];
   if (scenes.length === 0) throw new Error("Director: script produced no scenes");
-  const { totalDurationS } = scenesToAudioTiming(scenes);
-  const durationS = totalDurationS > 0 ? totalDurationS : DEFAULT_DURATION_S;
+  const { totalDurationS: scenesDurationS } = scenesToAudioTiming(scenes);
+  const durationS = scenesDurationS > 0 ? scenesDurationS : DEFAULT_DURATION_S;
 
   // 2. TTS
   emit("tts", { message: "Recording the voice", sceneCount: scenes.length });
-  const { tracks, mode } = await synthesize({
+  const { tracks, mode: ttsBackendMode } = await synthesize({
     scenes,
     palette,
     language,
@@ -125,7 +133,7 @@ export async function runDirectorPipeline({
   });
 
   // 3. Mix audio (always produced even if the MP4 stays silent at v1.6.7)
-  emit("audio", { message: "Mixing the score", mode });
+  emit("audio", { message: "Mixing the score", mode: ttsBackendMode });
   let audioBuffer = null;
   if (typeof createAudioBuffer === "function") {
     audioBuffer = mix({
@@ -210,7 +218,7 @@ export async function runDirectorPipeline({
     mp4Url,
     postcardUrl,
     scenes,
-    mode,
+    mode: ttsBackendMode,
     audioBuffer,
     frameCount: frames.length,
     durationS,

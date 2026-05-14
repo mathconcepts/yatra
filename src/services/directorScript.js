@@ -16,6 +16,7 @@ import { detectPeakMoments, selectRouteVariant } from "./peakMoments.js";
 import { readUserSettings } from "./userSettings.js";
 import { callAnthropicDirect } from "./anthropicDirectClient.js";
 import { getSystemPrompt, extractSystemPrompt } from "./directorPrompts.js";
+import { buildTourScriptRequest } from "./tourScript.js";
 
 import yadagiriDevotionalTe from "../fixtures/directorScript.yadagiri.devotional.te.json";
 
@@ -121,13 +122,23 @@ export function suggestPersonalNote({ config, tone }) {
  * Fetch a directed script. Returns { scenes, meta }. Throws on transport
  * or schema failure; caller decides whether to retry only-this-stage.
  */
-export async function generateScript({ config, tone, language, personalContext = "", routeVariantId, signal, turnstileToken } = {}) {
+export async function generateScript({
+  config, tone, language, personalContext = "",
+  routeVariantId, mode = "point-to-point", tourId,
+  coverageWeights, totalDurationS,
+  signal, turnstileToken,
+} = {}) {
   if (!config || !tone || !language) {
     throw new Error("generateScript requires {config, tone, language}");
   }
 
   const settings = readUserSettings();
-  const body = buildScriptRequest({ config, tone, language, personalContext, routeVariantId });
+  // Tour mode and point-to-point mode produce the SAME request shape
+  // for the Worker. Both modules expose mode/peakMoments/landmarks/meta.
+  // Worker prompt branches on `body.mode`.
+  const body = mode === "tour" && tourId
+    ? buildTourScriptRequest({ config, tourId, tone, language, personalContext, coverageWeights, totalDurationS })
+    : buildScriptRequest({ config, tone, language, personalContext, routeVariantId });
 
   // BYOK Anthropic: browser-direct to api.anthropic.com, bypassing our
   // Worker entirely. Trust model: user's long-lived bearer never touches

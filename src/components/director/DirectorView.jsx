@@ -49,16 +49,38 @@ function defaultLanguage() {
   return SUPPORTED_LANGUAGES.includes(raw) ? raw : "en";
 }
 
-const STEPS = [
-  { id: "tone",     title: "Pick a tone",         help: "How should the film feel?" },
-  { id: "route",    title: "Pick a location",     help: "Which journey are we directing?" },
-  { id: "trail",    title: "Pick a trail",        help: "This location has multiple ways up. Choose one." },
-  { id: "basemap",  title: "Pick a map look",     help: "What kind of map sits under the journey?" },
-  { id: "language", title: "Pick a language",     help: "Which language should the narrator speak?" },
-  { id: "voice",    title: "Pick a voice",        help: "Who narrates the film?" },
-  { id: "note",     title: "Tell us about it",    help: "Optional — a relative, a memory, what this means to you." },
-  { id: "review",   title: "Ready to direct",     help: "We'll compose script, voice, mix, and cut." },
+const DURATION_PRESETS_S = [15, 30, 60, 90];
+
+const STEP_DEFINITIONS = [
+  { id: "tone",      title: "Pick a tone",         help: "How should the film feel?" },
+  { id: "route",     title: "Pick a location",     help: "Which journey are we directing?" },
+  { id: "mode",      title: "Pick a mode",         help: "A trail journey, or a tour of places within this location?" },
+  { id: "trail",     title: "Pick a trail",        help: "This location has multiple ways up. Choose one." },
+  { id: "tour",      title: "Pick the places",     help: "Which spots should the film visit, and how to share the time?" },
+  { id: "basemap",   title: "Pick a map look",     help: "What kind of map sits under the journey?" },
+  { id: "language",  title: "Pick a language",     help: "Which language should the narrator speak?" },
+  { id: "voice",     title: "Pick a voice",        help: "Who narrates the film?" },
+  { id: "duration",  title: "Pick a duration",     help: "How long should the film be?" },
+  { id: "note",      title: "Tell us about it",    help: "Optional — a relative, a memory, what this means to you." },
+  { id: "review",    title: "Ready to direct",     help: "We'll compose script, voice, mix, and cut." },
 ];
+
+/**
+ * Pure: compute the visible wizard steps for the current state.
+ *
+ * The Mode step only appears when the location has tours[].
+ * Trail step appears in point-to-point mode (and only if the location
+ * has 2+ trail variants).
+ * Tour step appears only in tour mode.
+ */
+export function buildSteps({ locationHasTours, mode, locationHasMultipleTrails }) {
+  return STEP_DEFINITIONS.filter((s) => {
+    if (s.id === "mode") return locationHasTours;
+    if (s.id === "trail") return mode === "point-to-point" && locationHasMultipleTrails;
+    if (s.id === "tour")  return mode === "tour";
+    return true;
+  });
+}
 
 /**
  * AI Cinematographer — guided wizard.
@@ -90,6 +112,11 @@ export default function DirectorView({ locations = {}, initialLocationId, atlasC
   const [personalNote, setPersonalNote] = useState(() => readStoredNote(initialId));
   const [trailId, setTrailId] = useState("");
   const [voiceId, setVoiceId] = useState("");
+  // Tour mode state (Yatra v1.8)
+  const [mode, setMode] = useState("point-to-point");      // "point-to-point" | "tour"
+  const [tourId, setTourId] = useState("");                // selected tour id
+  const [coverage, setCoverage] = useState("equal");       // "equal" | "single:<poiId>"
+  const [totalDurationS, setTotalDurationS] = useState(30);
 
   const [stage, setStage] = useState("idle"); // idle | running | done | error
   const [progressMsg, setProgressMsg] = useState("");
@@ -102,9 +129,21 @@ export default function DirectorView({ locations = {}, initialLocationId, atlasC
   const palette = getPalette(tone);
   const route = routeChoices.find((r) => r.id === routeId)?.cfg;
   const trails = route?.routes || [];
+  const tours = route?.tours || [];
+  const locationHasTours = tours.length > 0;
+  const locationHasMultipleTrails = trails.length > 1;
   const selectedTrail = trails.find((t) => t.id === trailId) || trails[0] || null;
+  const selectedTour = tours.find((t) => t.id === tourId) || tours[0] || null;
+  const tourPois = selectedTour
+    ? selectedTour.pois.map((id) => (route?.landmarks || []).find((l) => l.id === id)).filter(Boolean)
+    : [];
   const voiceOptions = voicesForLanguage(language);
   const effectiveVoiceId = voiceId || palette.voice?.voiceIdByLang?.[language] || "";
+
+  const STEPS = useMemo(
+    () => buildSteps({ locationHasTours, mode, locationHasMultipleTrails }),
+    [locationHasTours, mode, locationHasMultipleTrails],
+  );
 
   // Reset trail when the location changes; pre-select the first trail
   // so the wizard never advances with no trail picked.
@@ -113,6 +152,19 @@ export default function DirectorView({ locations = {}, initialLocationId, atlasC
       setTrailId(trails[0].id);
     }
   }, [trails, trailId]);
+  // Reset tour selection when location changes; clamp mode back to
+  // point-to-point when the new location has no tours.
+  useEffect(() => {
+    if (!locationHasTours && mode === "tour") setMode("point-to-point");
+    if (tours.length > 0 && !tours.find((t) => t.id === tourId)) {
+      setTourId(tours[0].id);
+    }
+  }, [tours, tourId, locationHasTours, mode]);
+  // Clamp the step index when STEPS shrinks (e.g. user toggled mode
+  // and we removed the trail or tour step from the list).
+  useEffect(() => {
+    if (step >= STEPS.length) setStep(Math.max(0, STEPS.length - 1));
+  }, [STEPS.length, step]);
   // Reset voice when language changes; the previous voice may not exist
   // in the new language catalog.
   useEffect(() => { setVoiceId(""); }, [language]);
@@ -145,6 +197,7 @@ export default function DirectorView({ locations = {}, initialLocationId, atlasC
     const id = STEPS[step].id;
     if (id === "route") return !!routeId;
     if (id === "trail") return trails.length === 0 || !!(trailId || trails[0]?.id);
+    if (id === "tour")  return tourPois.length >= 1;
     return true; // every other step has a default
   }
 
@@ -187,6 +240,10 @@ export default function DirectorView({ locations = {}, initialLocationId, atlasC
         personalContext: personalNote,
         basemap,
         routeVariantId: selectedTrail?.id || null,
+        mode,
+        tourId: mode === "tour" ? (selectedTour?.id || null) : null,
+        coverageWeights: coverage,
+        totalDurationS,
         voiceOverride: effectiveVoiceId,
         turnstileToken,
         signal: abortRef.current.signal,
@@ -316,6 +373,111 @@ export default function DirectorView({ locations = {}, initialLocationId, atlasC
                 </ul>
               </div>
             )}
+          </section>
+        )}
+
+        {currentStep.id === "mode" && (
+          <section className="director-row" aria-label="Mode">
+            <div role="radiogroup" style={{ display: "grid", gap: 10 }}>
+              {[
+                {
+                  id: "point-to-point",
+                  title: "Trail journey",
+                  blurb: trails.length > 1
+                    ? `Walk one of the ${trails.length} known trails end-to-end (origin → destination), narrated along the way.`
+                    : "Walk the route end-to-end (origin → destination), narrated along the way.",
+                },
+                {
+                  id: "tour",
+                  title: "Tour of places",
+                  blurb: `Pick from ${tours.length} curated tour${tours.length === 1 ? "" : "s"} of landmarks within ${route?.title || "this location"}. Each spot gets its own scene; you choose how to share the time.`,
+                },
+              ].map((opt) => {
+                const active = opt.id === mode;
+                return (
+                  <button key={opt.id} type="button" role="radio" aria-checked={active}
+                          onClick={() => setMode(opt.id)}
+                          style={{
+                            textAlign: "left", padding: "0.85rem 1rem", borderRadius: 8, cursor: "pointer",
+                            border: active ? `2px solid ${palette.color.primary}` : "1px solid rgba(255,255,255,0.15)",
+                            background: active ? palette.color.parchment : "transparent",
+                            color: active ? palette.color.ink : "inherit",
+                          }}>
+                    <div style={{ fontWeight: 600, fontSize: "1rem", marginBottom: 4 }}>{opt.title}</div>
+                    <div style={{ fontSize: "0.85rem", opacity: 0.8 }}>{opt.blurb}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {currentStep.id === "tour" && (
+          <section className="director-row" aria-label="Tour">
+            {tours.length > 0 && (
+              <div style={{ display: "grid", gap: 8, marginBottom: "1rem" }}>
+                <div style={{ opacity: 0.7, fontSize: "0.83rem" }}>Which tour:</div>
+                <select value={tourId || selectedTour?.id || ""}
+                        onChange={(e) => { setTourId(e.target.value); setCoverage("equal"); }}
+                        style={{ width: "100%", padding: "0.55rem", fontSize: "0.95rem" }}>
+                  {tours.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}{t.subtitle ? ` — ${t.subtitle}` : ""}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div style={{ display: "grid", gap: 8 }}>
+              <div style={{ opacity: 0.7, fontSize: "0.83rem", marginBottom: "0.2rem" }}>
+                How to share the time across {tourPois.length} place{tourPois.length === 1 ? "" : "s"}:
+              </div>
+              <button type="button" onClick={() => setCoverage("equal")}
+                      style={coverageBtnStyle(coverage === "equal", palette)}>
+                <strong>Equal time</strong>
+                <div style={{ opacity: 0.75, fontSize: "0.82rem", marginTop: 4 }}>
+                  Every spot gets the same slice ({tourPois.length > 0 ? `~${(totalDurationS / tourPois.length).toFixed(1)}s` : ""} each).
+                </div>
+              </button>
+              {tourPois.map((p) => (
+                <button key={p.id} type="button" onClick={() => setCoverage(`single:${p.id}`)}
+                        style={coverageBtnStyle(coverage === `single:${p.id}`, palette)}>
+                  <strong>Focus on {p.name}</strong>
+                  <div style={{ opacity: 0.75, fontSize: "0.82rem", marginTop: 4 }}>
+                    {p.name} gets 80%; the others share the remaining 20%.
+                  </div>
+                </button>
+              ))}
+            </div>
+            {tourPois.length > 0 && (
+              <div style={{ marginTop: "0.9rem", fontSize: "0.82rem", opacity: 0.7 }}>
+                <strong>Scene order:</strong> {tourPois.map((p) => p.name).join(" → ")}
+              </div>
+            )}
+          </section>
+        )}
+
+        {currentStep.id === "duration" && (
+          <section className="director-row" aria-label="Duration">
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
+              {DURATION_PRESETS_S.map((sec) => {
+                const active = sec === totalDurationS;
+                return (
+                  <button key={sec} type="button" onClick={() => setTotalDurationS(sec)}
+                          style={{
+                            padding: "0.7rem 0.4rem", borderRadius: 6, cursor: "pointer",
+                            border: active ? `2px solid ${palette.color.primary}` : "1px solid rgba(255,255,255,0.15)",
+                            background: active ? palette.color.parchment : "transparent",
+                            color: active ? palette.color.ink : "inherit",
+                            fontWeight: 600, fontSize: "0.95rem",
+                          }}>
+                    {sec}s
+                  </button>
+                );
+              })}
+            </div>
+            <p style={{ margin: "0.6rem 0 0", fontSize: "0.8rem", opacity: 0.65 }}>
+              Shorter films pace tighter; longer films let the narrator linger. Default 30s
+              fits Reels and stories; 60-90s suits longer-form Johnny-Harris-style edits.
+            </p>
           </section>
         )}
 
@@ -460,10 +622,36 @@ export default function DirectorView({ locations = {}, initialLocationId, atlasC
             <dl style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "0.4rem 1rem", margin: 0 }}>
               <dt style={{ opacity: 0.6 }}>Tone</dt><dd style={{ margin: 0 }}>{palette.displayName}</dd>
               <dt style={{ opacity: 0.6 }}>Route</dt><dd style={{ margin: 0 }}>{route?.title || "—"}</dd>
-              <dt style={{ opacity: 0.6 }}>Trail</dt><dd style={{ margin: 0 }}>{selectedTrail?.name || "—"}</dd>
+              <dt style={{ opacity: 0.6 }}>Mode</dt><dd style={{ margin: 0 }}>
+                {mode === "tour"
+                  ? `Tour — ${selectedTour?.name || ""}`
+                  : "Trail journey"}
+              </dd>
+              {mode === "point-to-point" && (
+                <>
+                  <dt style={{ opacity: 0.6 }}>Trail</dt><dd style={{ margin: 0 }}>{selectedTrail?.name || "—"}</dd>
+                </>
+              )}
+              {mode === "tour" && (
+                <>
+                  <dt style={{ opacity: 0.6 }}>Stops</dt>
+                  <dd style={{ margin: 0, fontSize: "0.85rem" }}>
+                    {tourPois.map((p) => p.name).join(" → ") || "—"}
+                  </dd>
+                  <dt style={{ opacity: 0.6 }}>Timing</dt>
+                  <dd style={{ margin: 0, fontSize: "0.85rem" }}>
+                    {coverage === "equal"
+                      ? "Equal time"
+                      : coverage?.startsWith("single:")
+                        ? `Focus: ${tourPois.find((p) => p.id === coverage.slice("single:".length))?.name || "—"}`
+                        : "Custom"}
+                  </dd>
+                </>
+              )}
               <dt style={{ opacity: 0.6 }}>Map</dt><dd style={{ margin: 0, textTransform: "capitalize" }}>{basemap}</dd>
               <dt style={{ opacity: 0.6 }}>Language</dt><dd style={{ margin: 0 }}>{labelForLang(language)}</dd>
               <dt style={{ opacity: 0.6 }}>Voice</dt><dd style={{ margin: 0, fontSize: "0.85rem" }}>{effectiveVoiceId || "—"}</dd>
+              <dt style={{ opacity: 0.6 }}>Duration</dt><dd style={{ margin: 0 }}>{totalDurationS}s</dd>
               <dt style={{ opacity: 0.6 }}>Note</dt><dd style={{ margin: 0, opacity: personalNote ? 1 : 0.5 }}>
                 {personalNote || "(no personal note)"}
               </dd>
@@ -573,4 +761,14 @@ export default function DirectorView({ locations = {}, initialLocationId, atlasC
 
 function labelForLang(lang) {
   return { en: "English", hi: "हिन्दी", te: "తెలుగు", ta: "தமிழ்" }[lang] || lang;
+}
+
+function coverageBtnStyle(active, palette) {
+  return {
+    textAlign: "left", padding: "0.65rem 0.85rem", borderRadius: 6, cursor: "pointer",
+    border: active ? `2px solid ${palette.color.primary}` : "1px solid rgba(255,255,255,0.15)",
+    background: active ? palette.color.parchment : "transparent",
+    color: active ? palette.color.ink : "inherit",
+    width: "100%", display: "block",
+  };
 }
