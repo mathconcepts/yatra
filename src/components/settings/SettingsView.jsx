@@ -5,7 +5,7 @@ import {
   clearUserSettings,
 } from "../../services/userSettings.js";
 import { callAnthropicDirect } from "../../services/anthropicDirectClient.js";
-import { callOpenRouterDirect } from "../../services/openRouterDirectClient.js";
+import { rawCallOpenRouter } from "../../services/openRouterDirectClient.js";
 import { OPENROUTER_MODELS } from "../../services/openRouterCatalog.js";
 import { getSystemPrompt } from "../../services/directorPrompts.js";
 
@@ -317,18 +317,24 @@ async function testKey(key, value, pending = {}) {
     // not yet saved). Fall back to the saved model, then the default.
     const saved = readUserSettings();
     const model = pending.openRouterModel || saved.openRouterModel || undefined;
-    await callOpenRouterDirect({
+    // Test probe uses a TINY prompt with generous tokens. We don't care
+    // what the model says back — only that the key + model combination
+    // is accepted by OpenRouter and produces SOMETHING. parseClaudeResponse
+    // would reject most reply shapes from a probe; rawCallOpenRouter
+    // accepts content / reasoning / tool_calls / completions-style text.
+    const { text } = await rawCallOpenRouter({
       apiKey: value,
       model,
-      systemPrompt: getSystemPrompt("devotional"),
-      body: {
-        routeId: "_validate", routeTitle: "_validate",
-        tone: "devotional", language: "en",
-        peakMoments: [{ t: 0, kind: "origin", label: "x" }],
-      },
-      maxTokens: 8,
+      systemPrompt: "You are a test responder. Reply with the word OK.",
+      userPrompt: "ping",
+      maxTokens: 64,
       timeoutMs: 15000,
     });
+    if (!text || !text.trim()) {
+      const e = new Error("Model accepted the request but returned no text. Try another model.");
+      e.code = "parse";
+      throw e;
+    }
     return `OpenRouter key works${model ? ` (model: ${model})` : ""}.`;
   }
   if (key === "anthropicKey") {

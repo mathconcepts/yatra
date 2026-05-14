@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { callOpenRouterDirect } from "../src/services/openRouterDirectClient.js";
+import { callOpenRouterDirect, rawCallOpenRouter } from "../src/services/openRouterDirectClient.js";
 import {
   OPENROUTER_MODELS,
   isOpenRouterModelId,
@@ -125,5 +125,69 @@ describe("callOpenRouterDirect", () => {
     await expect(
       callOpenRouterDirect({ apiKey: "sk-or-x", systemPrompt, body, fetchImpl })
     ).rejects.toMatchObject({ code: "parse" });
+  });
+});
+
+describe("rawCallOpenRouter — multi-shape response handling", () => {
+  function mockResponse({ status = 200, json } = {}) {
+    return { ok: status >= 200 && status < 300, status, json: async () => json, text: async () => "" };
+  }
+
+  it("reads choices[0].message.content (standard chat shape)", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(mockResponse({
+      json: { choices: [{ message: { content: "hello" } }] },
+    }));
+    const out = await rawCallOpenRouter({
+      apiKey: "k", systemPrompt: "s", userPrompt: "u", fetchImpl,
+    });
+    expect(out.text).toBe("hello");
+  });
+
+  it("falls back to message.reasoning for reasoning models", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(mockResponse({
+      json: { choices: [{ message: { content: "", reasoning: "thought process" } }] },
+    }));
+    const out = await rawCallOpenRouter({
+      apiKey: "k", systemPrompt: "s", userPrompt: "u", fetchImpl,
+    });
+    expect(out.text).toBe("thought process");
+  });
+
+  it("falls back to tool_calls arguments", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(mockResponse({
+      json: {
+        choices: [{
+          message: {
+            content: "",
+            tool_calls: [{ function: { arguments: '{"x":1}' } }],
+          },
+        }],
+      },
+    }));
+    const out = await rawCallOpenRouter({
+      apiKey: "k", systemPrompt: "s", userPrompt: "u", fetchImpl,
+    });
+    expect(out.text).toBe('{"x":1}');
+  });
+
+  it("falls back to choices[0].text for completions-style models", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(mockResponse({
+      json: { choices: [{ text: "completion text", message: {} }] },
+    }));
+    const out = await rawCallOpenRouter({
+      apiKey: "k", systemPrompt: "s", userPrompt: "u", fetchImpl,
+    });
+    expect(out.text).toBe("completion text");
+  });
+
+  it("returns empty string (not error) when every field is missing", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(mockResponse({
+      json: { choices: [{ message: {} }] },
+    }));
+    const out = await rawCallOpenRouter({
+      apiKey: "k", systemPrompt: "s", userPrompt: "u", fetchImpl,
+    });
+    expect(out.text).toBe("");
+    // Caller (Test or Director) decides what to do with empty text.
   });
 });
