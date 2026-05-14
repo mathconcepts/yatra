@@ -32,8 +32,8 @@ const FIELD_DEFS = [
   {
     key: "openRouterModel",
     label: "OpenRouter model (optional)",
-    placeholder: "meta-llama/llama-3.3-70b-instruct:free",
-    help: "Which model OpenRouter should route to. Pick from the suggestions below or paste any provider/model slug from openrouter.ai/models. Leave blank for the default (Llama 3.3 70B, free).",
+    placeholder: "deepseek/deepseek-chat-v3-0324:free",
+    help: "Which model OpenRouter should route to. Pick from the suggestions below or paste any provider/model slug from openrouter.ai/models. Leave blank for the default (DeepSeek V3, free — most reliable at JSON output).",
     isPlain: true, // not a secret — don't mask
     suggestions: "openrouter-models",
   },

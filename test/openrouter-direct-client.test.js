@@ -120,6 +120,44 @@ describe("callOpenRouterDirect", () => {
     expect(out.scenes[0].narration).toBe("hi");
   });
 
+  it("sends response_format: json_object on the first attempt", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(mockResponse({
+      json: openAiContent('{"scenes":[{"tStart":0,"tEnd":5,"narration":"x","captionText":"x"}]}'),
+    }));
+    await callOpenRouterDirect({ apiKey: "sk-or-x", systemPrompt, body, fetchImpl });
+    const sent = JSON.parse(fetchImpl.mock.calls[0][1].body);
+    expect(sent.response_format).toEqual({ type: "json_object" });
+  });
+
+  it("retries with a stricter system prompt when the first attempt returns prose", async () => {
+    const fetchImpl = vi.fn()
+      // 1st call: prose preamble with no JSON
+      .mockResolvedValueOnce(mockResponse({
+        json: openAiContent("Let me analyze this prompt carefully. **Route:** Tirupati → Tirumala"),
+      }))
+      // 2nd call: clean JSON
+      .mockResolvedValueOnce(mockResponse({
+        json: openAiContent('{"scenes":[{"tStart":0,"tEnd":5,"narration":"y","captionText":"y"}]}'),
+      }));
+    const out = await callOpenRouterDirect({ apiKey: "sk-or-x", systemPrompt, body, fetchImpl });
+    expect(out.scenes).toHaveLength(1);
+    expect(out.scenes[0].narration).toBe("y");
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    // Second attempt should NOT carry response_format (we dropped it)
+    const sentRetry = JSON.parse(fetchImpl.mock.calls[1][1].body);
+    expect(sentRetry.response_format).toBeUndefined();
+    // Second attempt's system prompt should include the strict addendum
+    expect(sentRetry.messages[0].content).toMatch(/ABSOLUTE OUTPUT RULE/);
+  });
+
+  it("does NOT retry on auth/credits/rate errors", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(mockResponse({ status: 401, text: "nope" }));
+    await expect(
+      callOpenRouterDirect({ apiKey: "sk-or-x", systemPrompt, body, fetchImpl })
+    ).rejects.toMatchObject({ code: "auth" });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
   it("throws code='parse' when upstream returns empty content", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(mockResponse({ json: { choices: [{ message: { content: "" } }] } }));
     await expect(

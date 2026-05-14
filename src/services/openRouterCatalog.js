@@ -19,14 +19,20 @@
  * The DEFAULT is intentionally a free model so a fresh BYOK key with
  * zero credits still works on the first Test click.
  */
-export const OPENROUTER_DEFAULT_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
+// DeepSeek V3 is noticeably more reliable at strict-JSON output than
+// Llama 3.3 or smaller models. Llama 3.3 70B often emits markdown
+// analysis ("Let me analyze this prompt...") before the JSON, which
+// breaks parseClaudeResponse even with the prose-tolerant extractor.
+// DeepSeek consistently emits JSON-only when asked.
+export const OPENROUTER_DEFAULT_MODEL = "deepseek/deepseek-chat-v3-0324:free";
 
 export const OPENROUTER_MODELS = [
-  // Free models — listed first because they work without credits and
-  // the default is one of these.
-  { id: "meta-llama/llama-3.3-70b-instruct:free", label: "Llama 3.3 70B", note: "Free, rate-limited, very capable",  tier: "free" },
-  { id: "deepseek/deepseek-chat-v3-0324:free",    label: "DeepSeek V3",   note: "Free, excellent JSON output",       tier: "free" },
+  // Free models — DeepSeek leads because it's the most reliable at
+  // strict-JSON output of the free tier. The Director prompt requires
+  // valid JSON; models that ignore that instruction break the pipeline.
+  { id: "deepseek/deepseek-chat-v3-0324:free",    label: "DeepSeek V3",   note: "Free, best JSON reliability (default)", tier: "free" },
   { id: "qwen/qwen-2.5-72b-instruct:free",        label: "Qwen 2.5 72B",  note: "Free, strong multilingual",          tier: "free" },
+  { id: "meta-llama/llama-3.3-70b-instruct:free", label: "Llama 3.3 70B", note: "Free, sometimes emits prose preamble", tier: "free" },
   { id: "mistralai/mistral-small-3.1-24b-instruct:free", label: "Mistral Small 3.1", note: "Free, fast",          tier: "free" },
   { id: "google/gemini-2.0-flash-exp:free",       label: "Gemini 2.0 Flash", note: "Free experimental tier",         tier: "free" },
 
