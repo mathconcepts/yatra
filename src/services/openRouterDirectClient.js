@@ -23,7 +23,11 @@ import { OPENROUTER_DEFAULT_MODEL } from "./openRouterCatalog.js";
 
 const ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
 const DEFAULT_MODEL = OPENROUTER_DEFAULT_MODEL;
-const DEFAULT_MAX_TOKENS = 1024;
+// Bumped from 1024 → 4096. Reasoning models (DeepSeek R1, Qwen QwQ,
+// inclusionai/ring) burn output tokens on internal reasoning before
+// producing the scenes JSON. 1024 was leaving them with nothing left
+// to emit, surfacing as "OpenRouter returned no content".
+const DEFAULT_MAX_TOKENS = 4096;
 const DEFAULT_TIMEOUT_MS = 20000;
 
 function withCode(code, message) {
@@ -55,12 +59,20 @@ async function safeText(res) { try { return await res.text(); } catch { return "
  *   - "cors"    → browser blocked the request
  *   - "parse"   → upstream returned an unexpected shape
  */
-export async function callOpenRouterDirect({
+/**
+ * Low-level: POST to OpenRouter and return the raw assistant text.
+ * Throws Error with `code` on any non-2xx. Does NOT parse the body
+ * into our scenes shape — useful for the Settings Test probe which
+ * just wants to know "did the key + model work."
+ *
+ * Returns { text, raw } — text is the best-effort string content,
+ * raw is the full response object (caller can inspect debug fields).
+ */
+export async function rawCallOpenRouter({
   apiKey,
   model = DEFAULT_MODEL,
   systemPrompt,
-  body,
-  totalDurationS = 30,
+  userPrompt,
   maxTokens = DEFAULT_MAX_TOKENS,
   timeoutMs = DEFAULT_TIMEOUT_MS,
   fetchImpl = globalThis.fetch,
@@ -68,7 +80,6 @@ export async function callOpenRouterDirect({
   if (!apiKey) throw withCode("auth", "OpenRouter BYOK key is not set");
   if (typeof fetchImpl !== "function") throw withCode("parse", "fetch not available");
 
-  const userPrompt = buildUserPrompt(body, { totalDurationS });
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -79,16 +90,12 @@ export async function callOpenRouterDirect({
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${apiKey}`,
-        // OpenRouter uses these to identify the calling app for
-        // its dashboards. Both are optional but recommended.
         "HTTP-Referer": typeof location !== "undefined" ? location.origin : "https://yatra.local",
         "X-Title": "Yatra Director",
       },
       body: JSON.stringify({
         model,
         max_tokens: maxTokens,
-        // OpenRouter accepts OpenAI-style messages. system role works
-        // across every routed provider (Anthropic/OpenAI/Gemini/Llama).
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user",   content: userPrompt },
@@ -114,9 +121,6 @@ export async function callOpenRouterDirect({
   }
   if (res.status === 404) {
     const detail = await safeText(res);
-    // OpenRouter returns 404 when the model slug has been retired or
-    // doesn't exist. Surface a fix-the-slug message instead of the
-    // generic "parse" code.
     const isModelMiss = /No endpoints found|model/i.test(detail);
     throw withCode(
       isModelMiss ? "model-not-found" : "parse",
@@ -132,11 +136,40 @@ export async function callOpenRouterDirect({
   }
 
   const json = await res.json();
-  // OpenAI-compatible shape: { choices: [ { message: { content: "..." } } ] }
-  const text = json?.choices?.[0]?.message?.content;
-  if (typeof text !== "string" || text.length === 0) {
-    throw withCode("parse", "OpenRouter returned no content");
-  }
+  // OpenAI-compatible shape primary path: choices[0].message.content
+  // Fallbacks:
+  //   - message.reasoning   — reasoning models (e.g. inclusionai/ring)
+  //   - message.tool_calls  — some models return JSON in tool calls
+  //   - choices[0].text     — older completions-style models
+  const msg = json?.choices?.[0]?.message;
+  const text =
+    (typeof msg?.content === "string" && msg.content) ||
+    (typeof msg?.reasoning === "string" && msg.reasoning) ||
+    (Array.isArray(msg?.tool_calls) && msg.tool_calls[0]?.function?.arguments) ||
+    (typeof json?.choices?.[0]?.text === "string" && json.choices[0].text) ||
+    "";
+  return { text, raw: json };
+}
+
+/**
+ * High-level: full Director flow. Builds the user prompt, calls
+ * OpenRouter, parses scenes JSON. Used by directorScript.generateScript.
+ */
+export async function callOpenRouterDirect({
+  apiKey,
+  model = DEFAULT_MODEL,
+  systemPrompt,
+  body,
+  totalDurationS = 30,
+  maxTokens = DEFAULT_MAX_TOKENS,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  const userPrompt = buildUserPrompt(body, { totalDurationS });
+  const { text } = await rawCallOpenRouter({
+    apiKey, model, systemPrompt, userPrompt, maxTokens, timeoutMs, fetchImpl,
+  });
+  if (!text) throw withCode("parse", "OpenRouter returned no content");
   return parseClaudeResponse(text, {
     routeId: body.routeId,
     tone: body.tone,
