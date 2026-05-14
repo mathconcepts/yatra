@@ -25,6 +25,7 @@ import { generateScript } from "./directorScript.js";
 import { synthesizeScenes, sceneStarts } from "./directorTTS.js";
 import { mixDirectorAudio } from "./directorAudio.js";
 import { exportPostcard } from "./exportPostcard.js";
+import { mixWithBgm, deriveNarrationWindows } from "./bgmMixer.js";
 
 const DEFAULT_FPS = 24;
 const DEFAULT_DURATION_S = 30;
@@ -80,6 +81,8 @@ export async function runDirectorPipeline({
   mode = "point-to-point", // "point-to-point" (existing) | "tour" (Yatra v1.8, multi-POI circuit)
   tourId = null,          // when mode==="tour", which config.tours[].id is being directed
   coverageWeights = null, // tour-mode timing: "equal" | "single:<poiId>" | { [poiId]: number }
+  poiSubset = null,       // tour-mode subset of POIs to include (Set<id> or Array<id>)
+  bgmBuffer = null,       // optional decoded BGM AudioBuffer (M2); null = narrator only
   totalDurationS = 30,    // video duration in seconds. Configurable (15/30/60/90); 30 by default.
   voiceOverride = null,  // Google TTS voice id chosen by user in the wizard; undefined → palette default
   turnstileToken = null, // Cloudflare Turnstile token from widget; forwarded to Worker calls
@@ -111,7 +114,7 @@ export async function runDirectorPipeline({
   emit("script", { message: "Composing the narration" });
   const script = await generate({
     config, tone: palette.id, language, personalContext,
-    routeVariantId, mode, tourId, coverageWeights, totalDurationS,
+    routeVariantId, mode, tourId, coverageWeights, poiSubset, totalDurationS,
     turnstileToken, signal,
   });
   const scenes = script?.scenes || [];
@@ -143,6 +146,15 @@ export async function runDirectorPipeline({
       sceneStartsS: sceneStarts(scenes),
       createBuffer: createAudioBuffer,
     });
+    // Overlay BGM under the narration when a BGM buffer was loaded.
+    if (bgmBuffer) {
+      audioBuffer = mixWithBgm({
+        narrationBuffer: audioBuffer,
+        bgmBuffer,
+        narrationWindows: deriveNarrationWindows(scenes),
+        createBuffer: createAudioBuffer,
+      });
+    }
   }
   // If no createAudioBuffer is wired (e.g., environment without
   // OfflineAudioContext), we proceed without an AudioBuffer. The mixer

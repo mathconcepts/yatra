@@ -125,7 +125,7 @@ export function suggestPersonalNote({ config, tone }) {
 export async function generateScript({
   config, tone, language, personalContext = "",
   routeVariantId, mode = "point-to-point", tourId,
-  coverageWeights, totalDurationS,
+  coverageWeights, poiSubset, totalDurationS,
   signal, turnstileToken,
 } = {}) {
   if (!config || !tone || !language) {
@@ -137,7 +137,7 @@ export async function generateScript({
   // for the Worker. Both modules expose mode/peakMoments/landmarks/meta.
   // Worker prompt branches on `body.mode`.
   const body = mode === "tour" && tourId
-    ? buildTourScriptRequest({ config, tourId, tone, language, personalContext, coverageWeights, totalDurationS })
+    ? buildTourScriptRequest({ config, tourId, tone, language, personalContext, coverageWeights, poiSubset, totalDurationS })
     : buildScriptRequest({ config, tone, language, personalContext, routeVariantId });
 
   // BYOK Anthropic: browser-direct to api.anthropic.com, bypassing our

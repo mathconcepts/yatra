@@ -67,7 +67,15 @@ export function synthesizeTone(durationS, sampleRate = DEFAULT_SAMPLE_RATE, { fr
 function resolveMode(explicit) {
   if (explicit === "silent" || explicit === "tone" || explicit === "live") return explicit;
   try {
-    if (import.meta.env?.VITE_DIRECTOR_MOCK === "1") return "silent";
+    // Dev with MOCK=1 picks "tone" (audible scene markers) so the
+    // exported MP4 has hearable audio while the Worker stays offline.
+    // Set VITE_DIRECTOR_TTS_MODE=silent explicitly if you want quiet.
+    const env = import.meta.env || {};
+    const explicitEnv = env.VITE_DIRECTOR_TTS_MODE;
+    if (explicitEnv === "silent" || explicitEnv === "tone" || explicitEnv === "live") {
+      return explicitEnv;
+    }
+    if (env.VITE_DIRECTOR_MOCK === "1") return "tone";
   } catch { /* not in vite env */ }
   return "live";
 }

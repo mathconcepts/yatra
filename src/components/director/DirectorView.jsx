@@ -5,6 +5,9 @@ import { suggestPersonalNote } from "../../services/directorScript.js";
 import { BASEMAP_LABELS } from "../../services/basemapStyles.js";
 import { readUserSettings } from "../../services/userSettings.js";
 import { voicesForLanguage } from "../../services/voiceCatalog.js";
+import { BGM_TRACKS, defaultBgmForTone, getBgmTrack } from "../../services/bgmCatalog.js";
+import { TRAVELER_PROFILES, applyTravelerProfile } from "../../services/travelerProfile.js";
+import { loadBgm } from "../../services/bgmMixer.js";
 import TurnstileWidget from "../turnstile/TurnstileWidget.jsx";
 
 const PERSONAL_NOTE_STORAGE_PREFIX = "yatra.director.personalNote";
@@ -60,6 +63,8 @@ const STEP_DEFINITIONS = [
   { id: "basemap",   title: "Pick a map look",     help: "What kind of map sits under the journey?" },
   { id: "language",  title: "Pick a language",     help: "Which language should the narrator speak?" },
   { id: "voice",     title: "Pick a voice",        help: "Who narrates the film?" },
+  { id: "music",     title: "Pick background music", help: "What plays underneath the narration?" },
+  { id: "profile",   title: "Who's walking?",      help: "Optional — a quick traveler profile shapes the narration." },
   { id: "duration",  title: "Pick a duration",     help: "How long should the film be?" },
   { id: "note",      title: "Tell us about it",    help: "Optional — a relative, a memory, what this means to you." },
   { id: "review",    title: "Ready to direct",     help: "We'll compose script, voice, mix, and cut." },
@@ -78,7 +83,7 @@ export function buildSteps({ locationHasTours, mode, locationHasMultipleTrails }
     if (s.id === "mode") return locationHasTours;
     if (s.id === "trail") return mode === "point-to-point" && locationHasMultipleTrails;
     if (s.id === "tour")  return mode === "tour";
-    return true;
+    return true; // music, profile, duration, note, review are universal
   });
 }
 
@@ -115,8 +120,12 @@ export default function DirectorView({ locations = {}, initialLocationId, atlasC
   // Tour mode state (Yatra v1.8)
   const [mode, setMode] = useState("point-to-point");      // "point-to-point" | "tour"
   const [tourId, setTourId] = useState("");                // selected tour id
-  const [coverage, setCoverage] = useState("equal");       // "equal" | "single:<poiId>"
+  const [coverage, setCoverage] = useState("equal");       // "equal" | "single:<poiId>" | "custom"
+  const [poiSelection, setPoiSelection] = useState(null);  // Set<poiId> | null = all
+  const [customRatios, setCustomRatios] = useState({});    // {poiId: 0..1}
   const [totalDurationS, setTotalDurationS] = useState(30);
+  const [bgmId, setBgmId] = useState(() => defaultBgmForTone("devotional"));
+  const [profileId, setProfileId] = useState("skip");
 
   const [stage, setStage] = useState("idle"); // idle | running | done | error
   const [progressMsg, setProgressMsg] = useState("");
@@ -137,6 +146,11 @@ export default function DirectorView({ locations = {}, initialLocationId, atlasC
   const tourPois = selectedTour
     ? selectedTour.pois.map((id) => (route?.landmarks || []).find((l) => l.id === id)).filter(Boolean)
     : [];
+  const activePoiIds = poiSelection || new Set(tourPois.map((p) => p.id));
+  const activePois = tourPois.filter((p) => activePoiIds.has(p.id));
+  const effectiveCoverage = coverage === "custom"
+    ? customRatios
+    : coverage;
   const voiceOptions = voicesForLanguage(language);
   const effectiveVoiceId = voiceId || palette.voice?.voiceIdByLang?.[language] || "";
 
@@ -168,6 +182,11 @@ export default function DirectorView({ locations = {}, initialLocationId, atlasC
   // Reset voice when language changes; the previous voice may not exist
   // in the new language catalog.
   useEffect(() => { setVoiceId(""); }, [language]);
+  // When tone changes, suggest a tone-matched BGM but let manual picks stick.
+  useEffect(() => {
+    const suggested = defaultBgmForTone(tone);
+    setBgmId((current) => (current === "silence" || !current) ? suggested : current);
+  }, [tone]);
 
   useEffect(() => { setPersonalNote(readStoredNote(routeId)); }, [routeId]);
   useEffect(() => { writeStoredNote(routeId, personalNote); }, [routeId, personalNote]);
@@ -197,7 +216,7 @@ export default function DirectorView({ locations = {}, initialLocationId, atlasC
     const id = STEPS[step].id;
     if (id === "route") return !!routeId;
     if (id === "trail") return trails.length === 0 || !!(trailId || trails[0]?.id);
-    if (id === "tour")  return tourPois.length >= 1;
+    if (id === "tour")  return activePois.length >= 1;
     return true; // every other step has a default
   }
 
@@ -227,24 +246,36 @@ export default function DirectorView({ locations = {}, initialLocationId, atlasC
       ]);
 
       let createAudioBuffer;
+      let bgmBuffer = null;
       try {
         if (typeof OfflineAudioContext !== "undefined") {
           createAudioBuffer = (n, len, sr) => new OfflineAudioContext(n, len, sr).createBuffer(n, len, sr);
         }
       } catch { /* not available */ }
+      // Load BGM if a real track is chosen and AudioContext is available.
+      const track = getBgmTrack(bgmId);
+      if (track?.url && typeof AudioContext !== "undefined") {
+        try {
+          const ctx = new AudioContext();
+          bgmBuffer = await loadBgm({ url: track.url, audioContext: ctx });
+          ctx.close?.();
+        } catch { /* BGM file missing or decode failed — proceed without */ }
+      }
 
       const out = await runDirectorPipeline({
         config: route,
         palette,
         language,
-        personalContext: personalNote,
+        personalContext: applyTravelerProfile(personalNote, profileId),
         basemap,
         routeVariantId: selectedTrail?.id || null,
         mode,
         tourId: mode === "tour" ? (selectedTour?.id || null) : null,
-        coverageWeights: coverage,
+        coverageWeights: effectiveCoverage,
+        poiSubset: mode === "tour" ? activePoiIds : null,
         totalDurationS,
         voiceOverride: effectiveVoiceId,
+        bgmBuffer,
         turnstileToken,
         signal: abortRef.current.signal,
         makeRenderer: createOffscreenReelRenderer,
@@ -415,10 +446,15 @@ export default function DirectorView({ locations = {}, initialLocationId, atlasC
         {currentStep.id === "tour" && (
           <section className="director-row" aria-label="Tour">
             {tours.length > 0 && (
-              <div style={{ display: "grid", gap: 8, marginBottom: "1rem" }}>
+              <div style={{ display: "grid", gap: 6, marginBottom: "1rem" }}>
                 <div style={{ opacity: 0.7, fontSize: "0.83rem" }}>Which tour:</div>
                 <select value={tourId || selectedTour?.id || ""}
-                        onChange={(e) => { setTourId(e.target.value); setCoverage("equal"); }}
+                        onChange={(e) => {
+                          setTourId(e.target.value);
+                          setCoverage("equal");
+                          setPoiSelection(null);
+                          setCustomRatios({});
+                        }}
                         style={{ width: "100%", padding: "0.55rem", fontSize: "0.95rem" }}>
                   {tours.map((t) => (
                     <option key={t.id} value={t.id}>{t.name}{t.subtitle ? ` — ${t.subtitle}` : ""}</option>
@@ -426,18 +462,58 @@ export default function DirectorView({ locations = {}, initialLocationId, atlasC
                 </select>
               </div>
             )}
+
+            {tourPois.length > 1 && (
+              <div style={{ display: "grid", gap: 6, marginBottom: "1rem" }}>
+                <div style={{ opacity: 0.7, fontSize: "0.83rem" }}>
+                  Which places to include ({activePois.length} of {tourPois.length}):
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {tourPois.map((p) => {
+                    const on = activePoiIds.has(p.id);
+                    return (
+                      <button key={p.id} type="button"
+                              onClick={() => {
+                                const next = new Set(activePoiIds);
+                                if (on) next.delete(p.id); else next.add(p.id);
+                                if (next.size === 0) return; // never empty
+                                setPoiSelection(next);
+                                // If user toggled away the singled POI, fall back to equal
+                                if (coverage.startsWith("single:") && !next.has(coverage.slice("single:".length))) {
+                                  setCoverage("equal");
+                                }
+                              }}
+                              style={{
+                                padding: "0.4rem 0.7rem", borderRadius: 999, fontSize: "0.82rem", cursor: "pointer",
+                                border: on ? `1.5px solid ${palette.color.primary}` : "1px solid rgba(255,255,255,0.18)",
+                                background: on ? palette.color.parchment : "transparent",
+                                color: on ? palette.color.ink : "inherit",
+                              }}>
+                        {on ? "✓ " : ""}{p.name}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button type="button" style={chipStyle()} onClick={() => setPoiSelection(new Set(tourPois.map((p) => p.id)))}>All</button>
+                  <button type="button" style={chipStyle()} onClick={() => setPoiSelection(new Set(tourPois.slice(0, 2).map((p) => p.id)))}>First two</button>
+                  <button type="button" style={chipStyle()} onClick={() => setPoiSelection(new Set([tourPois[0]?.id].filter(Boolean)))}>One</button>
+                </div>
+              </div>
+            )}
+
             <div style={{ display: "grid", gap: 8 }}>
               <div style={{ opacity: 0.7, fontSize: "0.83rem", marginBottom: "0.2rem" }}>
-                How to share the time across {tourPois.length} place{tourPois.length === 1 ? "" : "s"}:
+                How to share the time across {activePois.length} place{activePois.length === 1 ? "" : "s"}:
               </div>
               <button type="button" onClick={() => setCoverage("equal")}
                       style={coverageBtnStyle(coverage === "equal", palette)}>
                 <strong>Equal time</strong>
                 <div style={{ opacity: 0.75, fontSize: "0.82rem", marginTop: 4 }}>
-                  Every spot gets the same slice ({tourPois.length > 0 ? `~${(totalDurationS / tourPois.length).toFixed(1)}s` : ""} each).
+                  Every spot gets the same slice ({activePois.length > 0 ? `~${(totalDurationS / activePois.length).toFixed(1)}s` : ""} each).
                 </div>
               </button>
-              {tourPois.map((p) => (
+              {activePois.length > 1 && activePois.map((p) => (
                 <button key={p.id} type="button" onClick={() => setCoverage(`single:${p.id}`)}
                         style={coverageBtnStyle(coverage === `single:${p.id}`, palette)}>
                   <strong>Focus on {p.name}</strong>
@@ -446,12 +522,91 @@ export default function DirectorView({ locations = {}, initialLocationId, atlasC
                   </div>
                 </button>
               ))}
+              {activePois.length > 1 && (
+                <button type="button" onClick={() => {
+                  setCoverage("custom");
+                  // Seed equal weights so sliders start sensibly
+                  const equal = 1 / activePois.length;
+                  const seed = {};
+                  for (const p of activePois) seed[p.id] = Math.round(equal * 100) / 100;
+                  setCustomRatios(seed);
+                }} style={coverageBtnStyle(coverage === "custom", palette)}>
+                  <strong>Custom mix</strong>
+                  <div style={{ opacity: 0.75, fontSize: "0.82rem", marginTop: 4 }}>
+                    Slide percentages per place. We'll normalize to 100%.
+                  </div>
+                </button>
+              )}
             </div>
-            {tourPois.length > 0 && (
-              <div style={{ marginTop: "0.9rem", fontSize: "0.82rem", opacity: 0.7 }}>
-                <strong>Scene order:</strong> {tourPois.map((p) => p.name).join(" → ")}
+
+            {coverage === "custom" && activePois.length > 1 && (
+              <div style={{ marginTop: "0.8rem", display: "grid", gap: 8 }}>
+                {activePois.map((p) => {
+                  const v = Number(customRatios[p.id] ?? 0);
+                  return (
+                    <label key={p.id} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, fontSize: "0.85rem" }}>
+                      <span>{p.name}</span>
+                      <span style={{ opacity: 0.7 }}>{Math.round(v * 100)}%</span>
+                      <input type="range" min="0.05" max="1" step="0.05" value={v}
+                             onChange={(e) => setCustomRatios((r) => ({ ...r, [p.id]: Number(e.target.value) }))}
+                             style={{ gridColumn: "1 / -1" }} />
+                    </label>
+                  );
+                })}
+                <div style={{ opacity: 0.6, fontSize: "0.78rem" }}>
+                  Total weights normalize to 100% — only relative size matters.
+                </div>
               </div>
             )}
+
+            {activePois.length > 0 && (
+              <div style={{ marginTop: "0.9rem", fontSize: "0.82rem", opacity: 0.7 }}>
+                <strong>Scene order:</strong> {activePois.map((p) => p.name).join(" → ")}
+              </div>
+            )}
+          </section>
+        )}
+
+        {currentStep.id === "music" && (
+          <section className="director-row" aria-label="Background music">
+            <div role="radiogroup" style={{ display: "grid", gap: 8 }}>
+              {BGM_TRACKS.map((t) => {
+                const active = t.id === bgmId;
+                return (
+                  <button key={t.id} type="button" role="radio" aria-checked={active}
+                          onClick={() => setBgmId(t.id)}
+                          style={coverageBtnStyle(active, palette)}>
+                    <strong>{t.name}</strong>
+                    <div style={{ opacity: 0.75, fontSize: "0.82rem", marginTop: 4 }}>{t.blurb}</div>
+                  </button>
+                );
+              })}
+            </div>
+            <p style={{ margin: "0.6rem 0 0", fontSize: "0.78rem", opacity: 0.6 }}>
+              Music ducks under the narration automatically (-12 dB). All tracks are CC0.
+              If the chosen track isn't installed yet, the film renders narrator-only.
+            </p>
+          </section>
+        )}
+
+        {currentStep.id === "profile" && (
+          <section className="director-row" aria-label="Traveler profile">
+            <div role="radiogroup" style={{ display: "grid", gap: 8 }}>
+              {TRAVELER_PROFILES.map((p) => {
+                const active = p.id === profileId;
+                return (
+                  <button key={p.id} type="button" role="radio" aria-checked={active}
+                          onClick={() => setProfileId(p.id)}
+                          style={coverageBtnStyle(active, palette)}>
+                    <strong>{p.label}</strong>
+                    <div style={{ opacity: 0.75, fontSize: "0.82rem", marginTop: 4 }}>{p.blurb}</div>
+                  </button>
+                );
+              })}
+            </div>
+            <p style={{ margin: "0.6rem 0 0", fontSize: "0.78rem", opacity: 0.6 }}>
+              The profile becomes a small hint inside the narration prompt. No personal details are sent beyond what you type in the next step.
+            </p>
           </section>
         )}
 
@@ -651,6 +806,10 @@ export default function DirectorView({ locations = {}, initialLocationId, atlasC
               <dt style={{ opacity: 0.6 }}>Map</dt><dd style={{ margin: 0, textTransform: "capitalize" }}>{basemap}</dd>
               <dt style={{ opacity: 0.6 }}>Language</dt><dd style={{ margin: 0 }}>{labelForLang(language)}</dd>
               <dt style={{ opacity: 0.6 }}>Voice</dt><dd style={{ margin: 0, fontSize: "0.85rem" }}>{effectiveVoiceId || "—"}</dd>
+              <dt style={{ opacity: 0.6 }}>Music</dt><dd style={{ margin: 0 }}>{getBgmTrack(bgmId)?.name || "—"}</dd>
+              <dt style={{ opacity: 0.6 }}>Profile</dt><dd style={{ margin: 0 }}>
+                {TRAVELER_PROFILES.find((p) => p.id === profileId)?.label || "—"}
+              </dd>
               <dt style={{ opacity: 0.6 }}>Duration</dt><dd style={{ margin: 0 }}>{totalDurationS}s</dd>
               <dt style={{ opacity: 0.6 }}>Note</dt><dd style={{ margin: 0, opacity: personalNote ? 1 : 0.5 }}>
                 {personalNote || "(no personal note)"}
@@ -727,6 +886,23 @@ export default function DirectorView({ locations = {}, initialLocationId, atlasC
             <a className="director-download" href={result.postcardUrl} download={`${route.id}-${tone}-${language}-postcard.png`}>
               ⬇ Postcard PNG
             </a>
+            {typeof navigator !== "undefined" && typeof navigator.share === "function" && (
+              <button type="button" className="director-download" style={{ cursor: "pointer", border: "none" }}
+                      onClick={async () => {
+                        try {
+                          const res = await fetch(result.mp4Url);
+                          const blob = await res.blob();
+                          const file = new File([blob], `${route.id}-${tone}.mp4`, { type: "video/mp4" });
+                          if (typeof navigator.canShare === "function" && !navigator.canShare({ files: [file] })) {
+                            await navigator.share({ title: route.title, text: "Made with Yatra", url: location.href });
+                          } else {
+                            await navigator.share({ title: route.title, text: "Made with Yatra", files: [file] });
+                          }
+                        } catch { /* user cancelled / unsupported */ }
+                      }}>
+                ↗ Share
+              </button>
+            )}
           </div>
           <p className="director-note">
             Audio mixer ran in <code>{result.mode}</code> mode. {result.audioBuffer
@@ -761,6 +937,13 @@ export default function DirectorView({ locations = {}, initialLocationId, atlasC
 
 function labelForLang(lang) {
   return { en: "English", hi: "हिन्दी", te: "తెలుగు", ta: "தமிழ்" }[lang] || lang;
+}
+
+function chipStyle() {
+  return {
+    padding: "0.25rem 0.65rem", borderRadius: 999, fontSize: "0.75rem", cursor: "pointer",
+    border: "1px solid rgba(255,255,255,0.15)", background: "transparent", color: "inherit",
+  };
 }
 
 function coverageBtnStyle(active, palette) {

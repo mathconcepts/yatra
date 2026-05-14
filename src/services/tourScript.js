@@ -93,6 +93,24 @@ export function normalizeCoverage(pois, weights) {
 }
 
 /**
+ * Pure: filter a POI list to the subset the user kept selected.
+ *
+ * `selection` is one of:
+ *   - undefined / null            → all POIs (no filter)
+ *   - Set<poiId> | Array<poiId>   → keep only those, in original order
+ *
+ * Empty selection collapses to "all" rather than blocking the render
+ * (the wizard's canAdvance check enforces ≥1 selection upstream).
+ */
+export function applyPoiSubset(pois, selection) {
+  if (!Array.isArray(pois) || pois.length === 0) return [];
+  if (selection == null) return pois;
+  const ids = selection instanceof Set ? selection : new Set(selection);
+  if (ids.size === 0) return pois;
+  return pois.filter((p) => ids.has(p.id));
+}
+
+/**
  * Pure: turn ordered POIs + coverage weights + total duration into the
  * peakMoments array the Director prompt expects. Each POI becomes a
  * chip at the midpoint of its allocated time slice (so the worker's
@@ -136,9 +154,11 @@ export function buildTourScriptRequest({
   language,
   personalContext = "",
   coverageWeights,
+  poiSubset,             // Set<id> | Array<id> | null — which POIs to keep
   totalDurationS = 30,
 }) {
-  const pois = resolveTourPois(config, tourId);
+  const allPois = resolveTourPois(config, tourId);
+  const pois = applyPoiSubset(allPois, poiSubset);
   const tour = (config?.tours || []).find((t) => t.id === tourId) || null;
   const peakMoments = buildTourPeakMoments({ pois, weights: coverageWeights, totalDurationS });
   const landmarks = pois.map((p) => ({

@@ -96,6 +96,41 @@ const config = {
     },
   ],
 
+  tours: [
+    {
+      id: "alipiri-ascent",
+      name: "Alipiri footpath — the climb",
+      subtitle: "From base gate to summit, the 11 km stone-stepped ascent",
+      pois: ["alipiri-gate", "gali-gopuram", "mokali-parvatham", "narasimha", "tirumala-summit"],
+      stats: { distanceKm: 11, durationHr: 4 },
+      color: "#3b82f6",
+    },
+    {
+      id: "srivari-ascent",
+      name: "Srivari Mettu — the steep way",
+      subtitle: "2 km, 2,388 steps, straight up the hill",
+      pois: ["srivari-base", "tirumala-summit"],
+      stats: { distanceKm: 2.1, durationHr: 1.8 },
+      color: "#fb923c",
+    },
+    {
+      id: "both-paths",
+      name: "Both paths to Tirumala",
+      subtitle: "The two stone-stepped routes side by side",
+      pois: ["alipiri-gate", "srivari-base", "narasimha", "tirumala-summit"],
+      stats: { distanceKm: 13, durationHr: 5.8 },
+      color: "#a05a32",
+    },
+    {
+      id: "summit-only",
+      name: "Tirumala summit",
+      subtitle: "Just the temple at the top — for a one-place film",
+      pois: ["tirumala-summit"],
+      stats: { distanceKm: 0, durationHr: 0 },
+      color: "#8a4528",
+    },
+  ],
+
   topography: {
     basemap: "topo",
     zoom: 12.5,
