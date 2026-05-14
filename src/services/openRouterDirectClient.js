@@ -156,13 +156,27 @@ export async function rawCallOpenRouter({
 }
 
 /**
+ * A model id that's known to honor JSON-only output. Used as the
+ * automatic last-ditch retry when the user's chosen model emits
+ * markdown analysis no matter what we ask. Re-exported here (not
+ * imported from the catalog) so this file has no circular dep risk.
+ */
+const FALLBACK_JSON_RELIABLE_MODEL = "deepseek/deepseek-chat-v3-0324:free";
+
+/**
  * High-level: full Director flow. Builds the user prompt, calls
  * OpenRouter with JSON-mode where supported, parses scenes JSON.
  *
- * If the first attempt returns non-JSON (model emitted prose preamble
- * with no parseable object), retries ONCE with a forceful "OUTPUT ONLY
- * JSON, no preamble" addendum to the system prompt. Smaller / weaker
- * models often need the second nudge.
+ * Three attempts in order:
+ *   1. User's chosen model + response_format: json_object
+ *   2. Same model + stricter prose system prompt (no response_format)
+ *   3. Fallback to a JSON-reliable model (deepseek-chat-v3) — only when
+ *      the user-chosen model is something else AND attempts 1+2 both
+ *      returned non-JSON content. Triggers a one-time inline notice
+ *      via the meta.usedFallbackModel flag the caller can surface.
+ *
+ * Auth / credits / rate / timeout / cors / model-not-found errors are
+ * NOT retried — those don't get better with another try.
  */
 export async function callOpenRouterDirect({
   apiKey,
@@ -182,9 +196,7 @@ export async function callOpenRouterDirect({
     totalDurationS,
   };
 
-  // Attempt 1: with response_format json_object so JSON-capable models
-  // emit valid JSON directly. Models that don't support the field
-  // ignore it (per OpenRouter docs).
+  // Attempt 1: requested model + response_format json_object.
   let firstError = null;
   try {
     const { text } = await rawCallOpenRouter({
@@ -194,24 +206,52 @@ export async function callOpenRouterDirect({
     if (text) return parseClaudeResponse(text, meta);
     firstError = withCode("parse", "OpenRouter returned no content");
   } catch (err) {
-    // 4xx errors are not retry-able. Only "parse" / empty content is.
     if (err?.code && err.code !== "parse") throw err;
     firstError = err;
   }
 
-  // Attempt 2: bolt a JSON-only addendum onto the system prompt. Drop
-  // response_format because the model couldn't honor it (signal: it
-  // emitted prose anyway), so making the request stricter via prose
-  // gives it a different angle.
+  // Attempt 2: same model + stricter prose prompt, no response_format.
   const stricterSystem = `${systemPrompt}\n\nABSOLUTE OUTPUT RULE: Your reply MUST start with the character '{' and end with the character '}'. No preamble. No "Let me analyze". No markdown fences. No commentary after. The first character of your reply is '{'. If you cannot comply, return only: {"scenes":[]}`;
+  let secondError = null;
   try {
     const { text } = await rawCallOpenRouter({
       apiKey, model, systemPrompt: stricterSystem, userPrompt, maxTokens, timeoutMs, fetchImpl,
     });
-    if (!text) throw withCode("parse", "OpenRouter returned no content (retry)");
-    return parseClaudeResponse(text, meta);
+    if (text) return parseClaudeResponse(text, meta);
+    secondError = withCode("parse", "OpenRouter returned no content (retry)");
   } catch (err) {
-    // Both attempts failed. Surface the more informative error.
-    throw err?.code === "parse" && firstError?.code === "parse" ? err : (firstError || err);
+    if (err?.code && err.code !== "parse") throw err;
+    secondError = err;
   }
+
+  // Attempt 3: cascade to a known JSON-reliable model. Only useful when
+  // the user picked something else; otherwise it's the same model again.
+  if (model !== FALLBACK_JSON_RELIABLE_MODEL) {
+    try {
+      const { text } = await rawCallOpenRouter({
+        apiKey, model: FALLBACK_JSON_RELIABLE_MODEL, systemPrompt, userPrompt,
+        maxTokens, timeoutMs, fetchImpl,
+        responseFormat: { type: "json_object" },
+      });
+      if (text) {
+        const result = parseClaudeResponse(text, meta);
+        // Tag the meta so the caller can show a one-line notice
+        // "Used DeepSeek V3 fallback because your chosen model emitted
+        // prose instead of JSON."
+        result.meta = {
+          ...(result.meta || {}),
+          usedFallbackModel: FALLBACK_JSON_RELIABLE_MODEL,
+          requestedModel: model,
+        };
+        return result;
+      }
+    } catch { /* fall through to the original error below */ }
+  }
+
+  // All attempts failed. Surface the most informative error — usually
+  // the second one (which has the strict-prompt context) but the first
+  // if its message is richer.
+  const e = secondError || firstError;
+  if (e) throw e;
+  throw withCode("parse", "OpenRouter returned no content after 3 attempts");
 }

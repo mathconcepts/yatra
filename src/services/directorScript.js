@@ -147,24 +147,47 @@ export async function generateScript({
   //   2. Anthropic direct — single-provider BYOK.
   //   3. Worker / mock — fallback paths below.
   // All three end with the same {scenes, meta} shape.
+  //
+  // When the LLM path fails AT ALL (network, parse, model rejecting
+  // JSON instructions, etc.), fall back to the deterministic mock
+  // script built from the config's landmarks. The user always gets a
+  // working render with real per-landmark captions — even if the AI
+  // refused to play along.
+  const llmAttempt = async (fn) => {
+    try { return await fn(); }
+    catch (err) {
+      // Auth / credits / rate / model-not-found / cors errors are
+      // user-facing — surface them rather than silently fall back.
+      const code = err?.code;
+      if (code && code !== "parse" && code !== "timeout") throw err;
+      // Otherwise: fall back to the mock script so the render proceeds.
+      const fallback = buildMockScenesFromBody(body, totalDurationS || 30);
+      fallback.meta = {
+        ...(fallback.meta || {}),
+        fallbackFromLlmError: err?.message || String(err),
+      };
+      return fallback;
+    }
+  };
+
   if (settings.openRouterKey && !isMockMode()) {
     const systemPrompt = getSystemPrompt(tone);
-    return callOpenRouterDirect({
+    return llmAttempt(() => callOpenRouterDirect({
       apiKey: settings.openRouterKey,
       model: settings.openRouterModel || undefined,
       systemPrompt,
       body,
       signal,
-    });
+    }));
   }
   if (settings.anthropicKey && !isMockMode()) {
     const systemPrompt = getSystemPrompt(tone);
-    return callAnthropicDirect({
+    return llmAttempt(() => callAnthropicDirect({
       apiKey: settings.anthropicKey,
       systemPrompt,
       body,
       signal,
-    });
+    }));
   }
 
   if (isMockMode()) {
