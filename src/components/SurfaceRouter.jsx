@@ -10,9 +10,10 @@ const Composer = lazy(() => import("./composer/MemoryComposer.jsx"));
 const Memories = lazy(() => import("./memories/MemoryGallery.jsx"));
 const Compare = lazy(() => import("./compare/CompareView.jsx"));
 const Director = lazy(() => import("./director/DirectorView.jsx"));
+const Settings = lazy(() => import("./settings/SettingsView.jsx"));
 
 const STORAGE_KEY = "yatra.surface";
-const VALID_SURFACES = ["atlas", "reels", "composer", "memories", "compare", "director"];
+const VALID_SURFACES = ["atlas", "reels", "composer", "memories", "compare", "director", "settings"];
 
 /**
  * Pure decision: pick the right surface for a viewport.
@@ -141,6 +142,14 @@ export default function SurfaceRouter({ atlas, locationId, locations, atlasConfi
     );
   }
 
+  if (surface === "settings") {
+    return (
+      <Suspense fallback={<div className="jm-loading" role="status">Loading…</div>}>
+        <Settings onCancel={() => switchSurface("atlas")} />
+      </Suspense>
+    );
+  }
+
   if (surface === "reels") {
     // When a memory was routed in (shared URL or opened from gallery),
     // ReelFeed sees a one-key locations map containing just that config.
@@ -202,6 +211,15 @@ export default function SurfaceRouter({ atlas, locationId, locations, atlasConfi
           aria-label="Open AI Director"
         >
           Director ✨
+        </button>
+        <button
+          type="button"
+          className="jm-surface-toggle"
+          onClick={() => switchSurface("settings")}
+          aria-label="Open Settings"
+          title="BYOK keys & custom Worker URL"
+        >
+          Settings ⚙
         </button>
         {atlasConfig && atlasMapRef && (
           <AtlasExportMenu mapRef={atlasMapRef} config={atlasConfig} />
