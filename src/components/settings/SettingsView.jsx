@@ -5,6 +5,8 @@ import {
   clearUserSettings,
 } from "../../services/userSettings.js";
 import { callAnthropicDirect } from "../../services/anthropicDirectClient.js";
+import { callOpenRouterDirect } from "../../services/openRouterDirectClient.js";
+import { OPENROUTER_MODELS } from "../../services/openRouterCatalog.js";
 import { getSystemPrompt } from "../../services/directorPrompts.js";
 
 /**
@@ -22,10 +24,24 @@ import { getSystemPrompt } from "../../services/directorPrompts.js";
 
 const FIELD_DEFS = [
   {
+    key: "openRouterKey",
+    label: "OpenRouter API key",
+    placeholder: "sk-or-...",
+    help: "Used for script generation. One key unlocks Claude / GPT / Gemini / Llama / DeepSeek / Qwen etc. Browser calls openrouter.ai directly — never touches our Worker. Wins over the Anthropic key below when both are set.",
+  },
+  {
+    key: "openRouterModel",
+    label: "OpenRouter model (optional)",
+    placeholder: "anthropic/claude-3.5-sonnet",
+    help: "Which model OpenRouter should route to. Pick from the suggestions below or paste any provider/model slug from openrouter.ai/models. Leave blank for the default (Claude 3.5 Sonnet).",
+    isPlain: true, // not a secret — don't mask
+    suggestions: "openrouter-models",
+  },
+  {
     key: "anthropicKey",
-    label: "Anthropic API key",
+    label: "Anthropic API key (direct)",
     placeholder: "sk-ant-...",
-    help: "Used for script generation. The browser calls api.anthropic.com directly — this key never touches our Worker.",
+    help: "Used for script generation IF no OpenRouter key is set. The browser calls api.anthropic.com directly — never touches our Worker.",
   },
   {
     key: "googleTtsKey",
@@ -144,7 +160,7 @@ export default function SettingsView({ onCancel }) {
             <p style={{ opacity: 0.65, fontSize: "0.83rem", margin: "0 0 0.5rem" }}>{def.help}</p>
             <input
               ref={(el) => { fieldRefs.current[def.key] = el; }}
-              type={isVisible ? "text" : "password"}
+              type={def.isPlain ? "text" : (isVisible ? "text" : "password")}
               value={v}
               placeholder={def.placeholder}
               onChange={(e) => onChange(def.key, e.target.value)}
@@ -156,12 +172,36 @@ export default function SettingsView({ onCancel }) {
                 color: "inherit", fontFamily: "monospace", fontSize: "0.9rem",
               }}
             />
+            {/* Suggestion chips for the OpenRouter model field */}
+            {def.suggestions === "openrouter-models" && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: "0.5rem" }}>
+                {OPENROUTER_MODELS.map((m) => {
+                  const active = v === m.id;
+                  return (
+                    <button key={m.id} type="button"
+                            onClick={() => onChange(def.key, m.id)}
+                            title={m.note}
+                            style={{
+                              padding: "0.25rem 0.6rem", borderRadius: 999, cursor: "pointer",
+                              fontSize: "0.78rem",
+                              border: active ? "1.5px solid #8a4528" : "1px solid rgba(255,255,255,0.18)",
+                              background: active ? "rgba(138,69,40,0.25)" : "transparent",
+                              color: "inherit",
+                            }}>
+                      {m.label}{m.tier === "free" ? " · free" : ""}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
             <div style={{ display: "flex", gap: 8, marginTop: "0.5rem", flexWrap: "wrap" }}>
-              <button type="button" onClick={() => setVisible((vis) => ({ ...vis, [def.key]: !isVisible }))}
-                      style={btnStyle()}>
-                {isVisible ? "Hide" : "Show"}
-              </button>
-              {def.key !== "workerUrl" && (
+              {!def.isPlain && (
+                <button type="button" onClick={() => setVisible((vis) => ({ ...vis, [def.key]: !isVisible }))}
+                        style={btnStyle()}>
+                  {isVisible ? "Hide" : "Show"}
+                </button>
+              )}
+              {def.key !== "workerUrl" && !def.isPlain && (
                 <button type="button" onClick={() => onTest(def.key)}
                         disabled={!v || ts?.status === "testing"}
                         style={btnStyle()}>
@@ -269,6 +309,22 @@ function btnStyle({ primary = false, danger = false } = {}) {
  * 2xx; throws Error with `code` matching mapValidationError() on failure.
  */
 async function testKey(key, value) {
+  if (key === "openRouterKey") {
+    const settings = readUserSettings();
+    await callOpenRouterDirect({
+      apiKey: value,
+      model: settings.openRouterModel || undefined,
+      systemPrompt: getSystemPrompt("devotional"),
+      body: {
+        routeId: "_validate", routeTitle: "_validate",
+        tone: "devotional", language: "en",
+        peakMoments: [{ t: 0, kind: "origin", label: "x" }],
+      },
+      maxTokens: 8,
+      timeoutMs: 15000,
+    });
+    return "OpenRouter key works.";
+  }
   if (key === "anthropicKey") {
     await callAnthropicDirect({
       apiKey: value,
@@ -318,6 +374,7 @@ function mapValidationError(err) {
   const code = err?.code;
   if (code === "auth") return "Key rejected by provider — revoked, wrong format, or restricted.";
   if (code === "rate") return "Provider rate-limited the test. Try again in a moment.";
+  if (code === "credits") return "OpenRouter says you're out of credits. Top up at openrouter.ai or pick a :free model.";
   if (code === "timeout") return "No response in 10 seconds. Check your network.";
   if (code === "cors") return "Provider blocked the browser request. Your network or provider config may not allow direct browser access.";
   if (code === "parse") return `Provider returned an unexpected response. ${err.message || ""}`;

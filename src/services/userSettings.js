@@ -44,6 +44,8 @@ export function readUserSettings() {
   if (typeof parsed.anthropicKey === "string" && parsed.anthropicKey) out.anthropicKey = parsed.anthropicKey;
   if (typeof parsed.googleTtsKey === "string" && parsed.googleTtsKey) out.googleTtsKey = parsed.googleTtsKey;
   if (typeof parsed.workerUrl === "string" && parsed.workerUrl) out.workerUrl = parsed.workerUrl;
+  if (typeof parsed.openRouterKey === "string" && parsed.openRouterKey) out.openRouterKey = parsed.openRouterKey;
+  if (typeof parsed.openRouterModel === "string" && parsed.openRouterModel) out.openRouterModel = parsed.openRouterModel;
   return out;
 }
 
@@ -54,7 +56,7 @@ export function readUserSettings() {
 export function writeUserSettings(partial = {}) {
   const current = readUserSettings();
   const next = { ...current };
-  for (const k of ["anthropicKey", "googleTtsKey", "workerUrl"]) {
+  for (const k of ["anthropicKey", "googleTtsKey", "workerUrl", "openRouterKey", "openRouterModel"]) {
     if (!(k in partial)) continue;
     const v = partial[k];
     if (typeof v !== "string" || v === "") delete next[k];
