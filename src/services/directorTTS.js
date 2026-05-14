@@ -84,11 +84,13 @@ function getWorkerBase() {
  * Build the /v1/tts request payload for a single scene.
  * Pure; exported for testability.
  */
-export function buildTtsRequest({ scene, palette, language }) {
+export function buildTtsRequest({ scene, palette, language, voiceOverride }) {
   if (!scene) throw new Error("buildTtsRequest: scene required");
   if (!palette) throw new Error("buildTtsRequest: palette required");
   if (!language) throw new Error("buildTtsRequest: language required");
-  const voiceId = palette.voice?.voiceIdByLang?.[language];
+  // User-picked voice (from Director wizard "Voice" step) wins over the
+  // palette's default. Both are passed through to /v1/tts as voiceId.
+  const voiceId = voiceOverride || palette.voice?.voiceIdByLang?.[language];
   if (!voiceId) throw new Error(`buildTtsRequest: no voiceId for ${palette.id}/${language}`);
   return {
     tone: palette.id,
@@ -118,12 +120,13 @@ export async function synthesizeSceneLive(scene, {
   signal,
   userTtsKey,         // BYOK Google TTS key from userSettings
   turnstileToken,     // Turnstile token captured by widget
+  voiceOverride,      // user-picked voice from Director Voice step
 }) {
   if (!workerBase) throw new Error("synthesizeSceneLive: workerBase required (VITE_DIRECTOR_WORKER_URL)");
   if (typeof fetchImpl !== "function") throw new Error("synthesizeSceneLive: fetchImpl required");
   if (typeof decodeAudio !== "function") throw new Error("synthesizeSceneLive: decodeAudio required");
 
-  const body = buildTtsRequest({ scene, palette, language });
+  const body = buildTtsRequest({ scene, palette, language, voiceOverride });
   const headers = { "content-type": "application/json" };
   if (turnstileToken) headers["X-Yatra-Turnstile"] = turnstileToken;
   if (userTtsKey) headers["X-Yatra-User-TTS-Key"] = userTtsKey;
@@ -179,6 +182,7 @@ export async function synthesizeScenes({
   signal,
   userTtsKey,        // BYOK Google TTS key (forwarded to /v1/tts via header)
   turnstileToken,    // Turnstile token from widget (omitted in dev / BYOK)
+  voiceOverride,     // user-picked voice from Director Voice step
 } = {}) {
   if (!Array.isArray(scenes) || scenes.length === 0) {
     throw new Error("synthesizeScenes: scenes array required");
@@ -227,6 +231,7 @@ export async function synthesizeScenes({
       signal,
       userTtsKey: effectiveUserTtsKey,
       turnstileToken,
+      voiceOverride,
     });
     out.push(buf);
   }

@@ -137,7 +137,12 @@ export default function SurfaceRouter({ atlas, locationId, locations, atlasConfi
   if (surface === "director") {
     return (
       <Suspense fallback={<div className="jm-loading" role="status">Loading…</div>}>
-        <Director locations={locations} onCancel={() => switchSurface("atlas")} />
+        <Director
+          locations={locations}
+          initialLocationId={locationId}
+          atlasConfig={atlasConfig}
+          onCancel={() => switchSurface("atlas")}
+        />
       </Suspense>
     );
   }

@@ -64,12 +64,32 @@ export function longestStretchIndex(waypoints) {
 }
 
 /**
+ * Pure: pick a route variant from a config. If `routeVariantId` is
+ * provided AND matches a `config.routes[].id`, that variant is returned.
+ * Otherwise falls back to `config.routes[0]` (back-compat — Director
+ * previously always used the first route).
+ */
+export function selectRouteVariant(config, routeVariantId) {
+  const routes = config?.routes;
+  if (!Array.isArray(routes) || routes.length === 0) return null;
+  if (routeVariantId) {
+    const hit = routes.find((r) => r.id === routeVariantId);
+    if (hit) return hit;
+  }
+  return routes[0];
+}
+
+/**
  * Pure: return chips sorted by t. Deduplicates near-coincident chips
  * by keeping the earlier-emitted one.
+ *
+ * `routeVariantId` selects which trail to walk when the location has
+ * multiple route options (e.g. Tirupati→Tirumala has Alipiri and
+ * Srivari). Omit to use the first route (existing behavior).
  */
-export function detectPeakMoments(config) {
+export function detectPeakMoments(config, routeVariantId) {
   if (!config) return [];
-  const route = config.routes?.[0];
+  const route = selectRouteVariant(config, routeVariantId);
   const wps = route?.waypoints;
   if (!Array.isArray(wps) || wps.length < 2) return [];
 

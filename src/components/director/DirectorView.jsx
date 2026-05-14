@@ -4,6 +4,7 @@ import { runDirectorPipeline } from "../../services/directorPipeline.js";
 import { suggestPersonalNote } from "../../services/directorScript.js";
 import { BASEMAP_LABELS } from "../../services/basemapStyles.js";
 import { readUserSettings } from "../../services/userSettings.js";
+import { voicesForLanguage } from "../../services/voiceCatalog.js";
 import TurnstileWidget from "../turnstile/TurnstileWidget.jsx";
 
 const PERSONAL_NOTE_STORAGE_PREFIX = "yatra.director.personalNote";
@@ -50,9 +51,11 @@ function defaultLanguage() {
 
 const STEPS = [
   { id: "tone",     title: "Pick a tone",         help: "How should the film feel?" },
-  { id: "route",    title: "Pick a route",        help: "Which journey are we directing?" },
+  { id: "route",    title: "Pick a location",     help: "Which journey are we directing?" },
+  { id: "trail",    title: "Pick a trail",        help: "This location has multiple ways up. Choose one." },
   { id: "basemap",  title: "Pick a map look",     help: "What kind of map sits under the journey?" },
   { id: "language", title: "Pick a language",     help: "Which language should the narrator speak?" },
+  { id: "voice",    title: "Pick a voice",        help: "Who narrates the film?" },
   { id: "note",     title: "Tell us about it",    help: "Optional — a relative, a memory, what this means to you." },
   { id: "review",   title: "Ready to direct",     help: "We'll compose script, voice, mix, and cut." },
 ];
@@ -68,18 +71,25 @@ const STEPS = [
  * Pipeline (script → TTS → mix → render → encode → postcard) ships
  * unchanged; only the entry UX is restructured.
  */
-export default function DirectorView({ locations = {}, onCancel }) {
+export default function DirectorView({ locations = {}, initialLocationId, atlasConfig, onCancel }) {
   const routeChoices = useMemo(
     () => Object.entries(locations).map(([id, cfg]) => ({ id, title: cfg.title, cfg })),
     [locations],
   );
+  // Prefer the location the user already picked on the Atlas surface; fall
+  // back to the first location only if nothing was passed in.
+  const initialId = initialLocationId && locations[initialLocationId]
+    ? initialLocationId
+    : (routeChoices[0]?.id || "");
 
   const [step, setStep] = useState(0);
   const [tone, setTone] = useState("devotional");
   const [language, setLanguage] = useState(defaultLanguage);
-  const [routeId, setRouteId] = useState(routeChoices[0]?.id || "");
+  const [routeId, setRouteId] = useState(initialId);
   const [basemap, setBasemap] = useState("relief");
-  const [personalNote, setPersonalNote] = useState(() => readStoredNote(routeChoices[0]?.id || ""));
+  const [personalNote, setPersonalNote] = useState(() => readStoredNote(initialId));
+  const [trailId, setTrailId] = useState("");
+  const [voiceId, setVoiceId] = useState("");
 
   const [stage, setStage] = useState("idle"); // idle | running | done | error
   const [progressMsg, setProgressMsg] = useState("");
@@ -91,6 +101,21 @@ export default function DirectorView({ locations = {}, onCancel }) {
 
   const palette = getPalette(tone);
   const route = routeChoices.find((r) => r.id === routeId)?.cfg;
+  const trails = route?.routes || [];
+  const selectedTrail = trails.find((t) => t.id === trailId) || trails[0] || null;
+  const voiceOptions = voicesForLanguage(language);
+  const effectiveVoiceId = voiceId || palette.voice?.voiceIdByLang?.[language] || "";
+
+  // Reset trail when the location changes; pre-select the first trail
+  // so the wizard never advances with no trail picked.
+  useEffect(() => {
+    if (trails.length > 0 && !trails.find((t) => t.id === trailId)) {
+      setTrailId(trails[0].id);
+    }
+  }, [trails, trailId]);
+  // Reset voice when language changes; the previous voice may not exist
+  // in the new language catalog.
+  useEffect(() => { setVoiceId(""); }, [language]);
 
   useEffect(() => { setPersonalNote(readStoredNote(routeId)); }, [routeId]);
   useEffect(() => { writeStoredNote(routeId, personalNote); }, [routeId, personalNote]);
@@ -105,6 +130,9 @@ export default function DirectorView({ locations = {}, onCancel }) {
     setBasemap(d.basemap);
     if (d.routeId) setRouteId(d.routeId);
     setPersonalNote(d.personalNote);
+    // Trail + voice resolve via useEffect once route + language settle.
+    setTrailId("");
+    setVoiceId("");
     setStep(STEPS.length - 1); // jump to Review
   }
 
@@ -114,7 +142,9 @@ export default function DirectorView({ locations = {}, onCancel }) {
   }
 
   function canAdvance() {
-    if (STEPS[step].id === "route") return !!routeId;
+    const id = STEPS[step].id;
+    if (id === "route") return !!routeId;
+    if (id === "trail") return trails.length === 0 || !!(trailId || trails[0]?.id);
     return true; // every other step has a default
   }
 
@@ -156,6 +186,8 @@ export default function DirectorView({ locations = {}, onCancel }) {
         language,
         personalContext: personalNote,
         basemap,
+        routeVariantId: selectedTrail?.id || null,
+        voiceOverride: effectiveVoiceId,
         turnstileToken,
         signal: abortRef.current.signal,
         makeRenderer: createOffscreenReelRenderer,
@@ -266,6 +298,61 @@ export default function DirectorView({ locations = {}, onCancel }) {
                 <option key={r.id} value={r.id}>{r.title}</option>
               ))}
             </select>
+            {route?.landmarks?.length > 0 && (
+              <div style={{ marginTop: "0.75rem", fontSize: "0.85rem", opacity: 0.8 }}>
+                <strong style={{ display: "block", marginBottom: "0.4rem", opacity: 0.7 }}>
+                  Places we'll narrate along the way:
+                </strong>
+                <ul style={{ margin: 0, paddingLeft: "1.1rem" }}>
+                  {route.landmarks.slice(0, 6).map((lm) => (
+                    <li key={lm.id || lm.name}>
+                      <strong>{lm.name}</strong>
+                      {lm.blurb && <span style={{ opacity: 0.75 }}> — {lm.blurb.slice(0, 110)}{lm.blurb.length > 110 ? "…" : ""}</span>}
+                    </li>
+                  ))}
+                  {route.landmarks.length > 6 && (
+                    <li style={{ opacity: 0.6 }}>and {route.landmarks.length - 6} more</li>
+                  )}
+                </ul>
+              </div>
+            )}
+          </section>
+        )}
+
+        {currentStep.id === "trail" && (
+          <section className="director-row" aria-label="Trail">
+            {trails.length === 0 && (
+              <p style={{ opacity: 0.6, fontStyle: "italic" }}>
+                This location has only one path — no trail choice needed. Hit Next.
+              </p>
+            )}
+            {trails.length > 0 && (
+              <div style={{ display: "grid", gap: 10 }}>
+                {trails.map((t) => {
+                  const active = t.id === (trailId || trails[0].id);
+                  return (
+                    <button key={t.id} type="button" onClick={() => setTrailId(t.id)}
+                            style={{
+                              display: "block", textAlign: "left", padding: "0.7rem 0.9rem", borderRadius: 6,
+                              cursor: "pointer",
+                              border: active ? `2px solid ${palette.color.primary}` : "1px solid rgba(255,255,255,0.15)",
+                              background: active ? palette.color.parchment : "transparent",
+                              color: active ? palette.color.ink : "inherit",
+                            }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+                        <strong style={{ fontSize: "1rem" }}>{t.name}</strong>
+                        <span style={{ fontSize: "0.78rem", opacity: 0.7 }}>{t.difficulty || ""}</span>
+                      </div>
+                      <div style={{ fontSize: "0.82rem", marginTop: "0.25rem", opacity: 0.75 }}>
+                        {t.stats?.distanceKm ? `${t.stats.distanceKm} km` : ""}
+                        {t.stats?.steps ? ` · ${t.stats.steps.toLocaleString()} steps` : ""}
+                        {t.stats?.durationHr ? ` · ~${t.stats.durationHr} hr` : ""}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </section>
         )}
 
@@ -307,6 +394,39 @@ export default function DirectorView({ locations = {}, onCancel }) {
           </section>
         )}
 
+        {currentStep.id === "voice" && (
+          <section className="director-row" aria-label="Voice">
+            {voiceOptions.length === 0 && (
+              <p style={{ opacity: 0.65, fontStyle: "italic" }}>
+                No voice options published for this language yet — we'll use the palette default.
+              </p>
+            )}
+            {voiceOptions.length > 0 && (
+              <div role="radiogroup" style={{ display: "grid", gap: 8 }}>
+                {voiceOptions.map((v) => {
+                  const active = v.id === effectiveVoiceId;
+                  return (
+                    <button key={v.id} type="button" role="radio" aria-checked={active}
+                            onClick={() => setVoiceId(v.id)}
+                            style={{
+                              textAlign: "left", padding: "0.6rem 0.8rem", borderRadius: 6, cursor: "pointer",
+                              border: active ? `2px solid ${palette.color.primary}` : "1px solid rgba(255,255,255,0.15)",
+                              background: active ? palette.color.parchment : "transparent",
+                              color: active ? palette.color.ink : "inherit",
+                              fontSize: "0.9rem",
+                            }}>
+                      {v.label}
+                    </button>
+                  );
+                })}
+                <p style={{ margin: "0.4rem 0 0", fontSize: "0.78rem", opacity: 0.6 }}>
+                  Picked from Google Cloud TTS · pitch and tempo stay on the {palette.displayName.toLowerCase()} palette.
+                </p>
+              </div>
+            )}
+          </section>
+        )}
+
         {currentStep.id === "note" && (
           <section className="director-row" aria-label="Personal note">
             <textarea id="director-personal-note" className="director-personal-note"
@@ -340,8 +460,10 @@ export default function DirectorView({ locations = {}, onCancel }) {
             <dl style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "0.4rem 1rem", margin: 0 }}>
               <dt style={{ opacity: 0.6 }}>Tone</dt><dd style={{ margin: 0 }}>{palette.displayName}</dd>
               <dt style={{ opacity: 0.6 }}>Route</dt><dd style={{ margin: 0 }}>{route?.title || "—"}</dd>
+              <dt style={{ opacity: 0.6 }}>Trail</dt><dd style={{ margin: 0 }}>{selectedTrail?.name || "—"}</dd>
               <dt style={{ opacity: 0.6 }}>Map</dt><dd style={{ margin: 0, textTransform: "capitalize" }}>{basemap}</dd>
               <dt style={{ opacity: 0.6 }}>Language</dt><dd style={{ margin: 0 }}>{labelForLang(language)}</dd>
+              <dt style={{ opacity: 0.6 }}>Voice</dt><dd style={{ margin: 0, fontSize: "0.85rem" }}>{effectiveVoiceId || "—"}</dd>
               <dt style={{ opacity: 0.6 }}>Note</dt><dd style={{ margin: 0, opacity: personalNote ? 1 : 0.5 }}>
                 {personalNote || "(no personal note)"}
               </dd>

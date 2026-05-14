@@ -12,7 +12,7 @@
  * import schemas from a shared file once the worker lives.
  */
 
-import { detectPeakMoments } from "./peakMoments.js";
+import { detectPeakMoments, selectRouteVariant } from "./peakMoments.js";
 import { readUserSettings } from "./userSettings.js";
 import { callAnthropicDirect } from "./anthropicDirectClient.js";
 import { getSystemPrompt, extractSystemPrompt } from "./directorPrompts.js";
@@ -44,17 +44,23 @@ function getWorkerBase() {
  * Build the request payload from a Yatra location config. Reuses
  * detectPeakMoments so scenes ARE peak moments (no re-derivation).
  */
-export function buildScriptRequest({ config, tone, language, personalContext = "" }) {
-  const peaks = detectPeakMoments(config);
-  const route = config.routes?.[0];
+export function buildScriptRequest({ config, tone, language, personalContext = "", routeVariantId }) {
+  const peaks = detectPeakMoments(config, routeVariantId);
+  const route = selectRouteVariant(config, routeVariantId);
   const waypoints = route?.waypoints || [];
-  const landmarks = (config.landmarks || []).map((l) => ({
-    name: l.name,
-    facts: l.curatedFacts || [], // future field; empty for now
-    lat: l.lat,
-    lon: l.lon,
-  }));
-  const distanceKm = route?.distanceKm ?? null;
+  // Filter landmarks to those geographically near the selected route
+  // variant. Srivari Mettu (2.1km steep ascent) shouldn't see the
+  // Alipiri-path landmarks 8km away. We keep landmarks within ~1km of
+  // any waypoint on the chosen trail.
+  const landmarks = (config.landmarks || [])
+    .filter((l) => isNearRoute(l, waypoints))
+    .map((l) => ({
+      name: l.name,
+      facts: l.curatedFacts || l.facts || [],
+      lat: l.lat,
+      lon: l.lon,
+    }));
+  const distanceKm = route?.stats?.distanceKm ?? route?.distanceKm ?? null;
   const elevations = waypoints.map((w) => w.elev).filter((e) => Number.isFinite(e));
   const elevationGainM =
     elevations.length > 1
@@ -62,7 +68,8 @@ export function buildScriptRequest({ config, tone, language, personalContext = "
       : null;
   return {
     routeId: config.id,
-    routeTitle: config.title,
+    routeTitle: route?.name ? `${config.title} — ${route.name}` : config.title,
+    routeVariantId: route?.id || null,
     tone,
     language,
     peakMoments: peaks.map((p) => ({ t: p.t, kind: p.kind, label: p.label })),
@@ -72,6 +79,25 @@ export function buildScriptRequest({ config, tone, language, personalContext = "
     waypointCount: waypoints.length,
     personalContext: typeof personalContext === "string" ? personalContext.trim().slice(0, 500) : "",
   };
+}
+
+function isNearRoute(landmark, waypoints, thresholdKm = 1) {
+  if (!landmark || !Array.isArray(waypoints) || waypoints.length === 0) return false;
+  if (!Number.isFinite(landmark.lat) || !Number.isFinite(landmark.lon)) return false;
+  for (const wp of waypoints) {
+    if (haversineKm(landmark, wp) <= thresholdKm) return true;
+  }
+  return false;
+}
+
+function haversineKm(a, b) {
+  const R = 6371;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLon = ((b.lon - a.lon) * Math.PI) / 180;
+  const lat1 = (a.lat * Math.PI) / 180;
+  const lat2 = (b.lat * Math.PI) / 180;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
 }
 
 /**
@@ -95,13 +121,13 @@ export function suggestPersonalNote({ config, tone }) {
  * Fetch a directed script. Returns { scenes, meta }. Throws on transport
  * or schema failure; caller decides whether to retry only-this-stage.
  */
-export async function generateScript({ config, tone, language, personalContext = "", signal, turnstileToken } = {}) {
+export async function generateScript({ config, tone, language, personalContext = "", routeVariantId, signal, turnstileToken } = {}) {
   if (!config || !tone || !language) {
     throw new Error("generateScript requires {config, tone, language}");
   }
 
   const settings = readUserSettings();
-  const body = buildScriptRequest({ config, tone, language, personalContext });
+  const body = buildScriptRequest({ config, tone, language, personalContext, routeVariantId });
 
   // BYOK Anthropic: browser-direct to api.anthropic.com, bypassing our
   // Worker entirely. Trust model: user's long-lived bearer never touches

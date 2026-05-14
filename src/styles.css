@@ -730,17 +730,70 @@ body {
  *  MEMORY COMPOSER (v3.1 Slice A — scaffold)
  * ═══════════════════════════════════════════════════════════════════ */
 
+/* ─── First-run location picker ────────────────────────────────── */
+.jm-firstrun {
+  position: fixed; inset: 0;
+  background: linear-gradient(135deg, #0c0f17 0%, #1a1208 100%);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 2rem; z-index: 2000; color: #f4e8d0;
+  font-family: "Manrope", system-ui, sans-serif;
+}
+.jm-firstrun-title {
+  font-family: "Cormorant Garamond", serif;
+  font-size: 2.6rem; margin: 0 0 0.5rem; color: #f4e8d0;
+  text-align: center;
+}
+.jm-firstrun-sub {
+  opacity: 0.7; margin: 0 0 1.8rem; text-align: center;
+  max-width: 540px; font-size: 0.95rem;
+}
+.jm-firstrun-grid {
+  display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  width: min(900px, 100%);
+}
+.jm-firstrun-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(244, 232, 208, 0.18);
+  color: inherit; padding: 1.1rem 1.2rem; border-radius: 10px;
+  cursor: pointer; text-align: left; font-family: inherit;
+  transition: transform 0.12s, background 0.12s, border-color 0.12s;
+}
+.jm-firstrun-card:hover {
+  background: rgba(255, 157, 58, 0.12);
+  border-color: rgba(255, 157, 58, 0.6);
+  transform: translateY(-2px);
+}
+.jm-firstrun-card-title { font-size: 1.15rem; font-weight: 600; margin-bottom: 4px; }
+.jm-firstrun-card-sub { opacity: 0.65; font-size: 0.88rem; }
+.jm-firstrun-card-meta { margin-top: 6px; font-size: 0.78rem; opacity: 0.55; }
+
 .jm-surface-toggles {
   position: fixed;
   bottom: 16px;
-  left: 16px;
+  /* Moved from left to right so the column no longer overlaps the
+     map's playback strip (Begin Journey / 1× 2× 4× / reset). The map
+     card hugs the left edge of the viewport; the toggles now live on
+     the opposite side. */
+  right: 16px;
   display: flex;
   flex-direction: column;
   gap: 8px;
   z-index: 100;
-  align-items: flex-start;
+  align-items: flex-end;
 }
 .jm-surface-toggles .jm-surface-toggle { width: 160px; text-align: center; }
+
+/* On wide screens the right column may collide with the
+   SidePanels stack (weather + position cards) that anchors top-right.
+   Cap the toggle column height so it scrolls within itself if the
+   viewport is tiny rather than swallowing other UI. */
+@media (max-height: 760px) {
+  .jm-surface-toggles {
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+  }
+}
 
 .composer {
   position: fixed;
