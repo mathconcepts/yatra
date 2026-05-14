@@ -76,12 +76,23 @@ export async function rawCallOpenRouter({
   maxTokens = DEFAULT_MAX_TOKENS,
   timeoutMs = DEFAULT_TIMEOUT_MS,
   fetchImpl = globalThis.fetch,
+  responseFormat = null,  // {type: "json_object"} forces JSON-only output where supported
 } = {}) {
   if (!apiKey) throw withCode("auth", "OpenRouter BYOK key is not set");
   if (typeof fetchImpl !== "function") throw withCode("parse", "fetch not available");
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  const requestBody = {
+    model,
+    max_tokens: maxTokens,
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user",   content: userPrompt },
+    ],
+  };
+  if (responseFormat) requestBody.response_format = responseFormat;
 
   let res;
   try {
@@ -93,14 +104,7 @@ export async function rawCallOpenRouter({
         "HTTP-Referer": typeof location !== "undefined" ? location.origin : "https://yatra.local",
         "X-Title": "Yatra Director",
       },
-      body: JSON.stringify({
-        model,
-        max_tokens: maxTokens,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user",   content: userPrompt },
-        ],
-      }),
+      body: JSON.stringify(requestBody),
       signal: controller.signal,
     });
   } catch (err) {
@@ -153,7 +157,12 @@ export async function rawCallOpenRouter({
 
 /**
  * High-level: full Director flow. Builds the user prompt, calls
- * OpenRouter, parses scenes JSON. Used by directorScript.generateScript.
+ * OpenRouter with JSON-mode where supported, parses scenes JSON.
+ *
+ * If the first attempt returns non-JSON (model emitted prose preamble
+ * with no parseable object), retries ONCE with a forceful "OUTPUT ONLY
+ * JSON, no preamble" addendum to the system prompt. Smaller / weaker
+ * models often need the second nudge.
  */
 export async function callOpenRouterDirect({
   apiKey,
@@ -166,14 +175,43 @@ export async function callOpenRouterDirect({
   fetchImpl = globalThis.fetch,
 } = {}) {
   const userPrompt = buildUserPrompt(body, { totalDurationS });
-  const { text } = await rawCallOpenRouter({
-    apiKey, model, systemPrompt, userPrompt, maxTokens, timeoutMs, fetchImpl,
-  });
-  if (!text) throw withCode("parse", "OpenRouter returned no content");
-  return parseClaudeResponse(text, {
+  const meta = {
     routeId: body.routeId,
     tone: body.tone,
     language: body.language,
     totalDurationS,
-  });
+  };
+
+  // Attempt 1: with response_format json_object so JSON-capable models
+  // emit valid JSON directly. Models that don't support the field
+  // ignore it (per OpenRouter docs).
+  let firstError = null;
+  try {
+    const { text } = await rawCallOpenRouter({
+      apiKey, model, systemPrompt, userPrompt, maxTokens, timeoutMs, fetchImpl,
+      responseFormat: { type: "json_object" },
+    });
+    if (text) return parseClaudeResponse(text, meta);
+    firstError = withCode("parse", "OpenRouter returned no content");
+  } catch (err) {
+    // 4xx errors are not retry-able. Only "parse" / empty content is.
+    if (err?.code && err.code !== "parse") throw err;
+    firstError = err;
+  }
+
+  // Attempt 2: bolt a JSON-only addendum onto the system prompt. Drop
+  // response_format because the model couldn't honor it (signal: it
+  // emitted prose anyway), so making the request stricter via prose
+  // gives it a different angle.
+  const stricterSystem = `${systemPrompt}\n\nABSOLUTE OUTPUT RULE: Your reply MUST start with the character '{' and end with the character '}'. No preamble. No "Let me analyze". No markdown fences. No commentary after. The first character of your reply is '{'. If you cannot comply, return only: {"scenes":[]}`;
+  try {
+    const { text } = await rawCallOpenRouter({
+      apiKey, model, systemPrompt: stricterSystem, userPrompt, maxTokens, timeoutMs, fetchImpl,
+    });
+    if (!text) throw withCode("parse", "OpenRouter returned no content (retry)");
+    return parseClaudeResponse(text, meta);
+  } catch (err) {
+    // Both attempts failed. Surface the more informative error.
+    throw err?.code === "parse" && firstError?.code === "parse" ? err : (firstError || err);
+  }
 }
