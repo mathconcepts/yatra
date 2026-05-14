@@ -3,6 +3,8 @@ import { PALETTE_IDS, getPalette, SUPPORTED_LANGUAGES } from "../../services/ton
 import { runDirectorPipeline } from "../../services/directorPipeline.js";
 import { suggestPersonalNote } from "../../services/directorScript.js";
 import { BASEMAP_LABELS } from "../../services/basemapStyles.js";
+import { readUserSettings } from "../../services/userSettings.js";
+import TurnstileWidget from "../turnstile/TurnstileWidget.jsx";
 
 const PERSONAL_NOTE_STORAGE_PREFIX = "yatra.director.personalNote";
 const BASEMAP_OPTIONS = ["topo", "imagery", "relief"];
@@ -84,6 +86,7 @@ export default function DirectorView({ locations = {}, onCancel }) {
   const [progressDetail, setProgressDetail] = useState("");
   const [result, setResult] = useState(null);
   const [errorMsg, setErrorMsg] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState(null);
   const abortRef = useRef(null);
 
   const palette = getPalette(tone);
@@ -153,6 +156,7 @@ export default function DirectorView({ locations = {}, onCancel }) {
         language,
         personalContext: personalNote,
         basemap,
+        turnstileToken,
         signal: abortRef.current.signal,
         makeRenderer: createOffscreenReelRenderer,
         encodeMp4Impl: encodeMp4,
@@ -193,6 +197,9 @@ export default function DirectorView({ locations = {}, onCancel }) {
         </div>
         <button type="button" className="composer-cancel" onClick={onCancel} aria-label="Close director">×</button>
       </header>
+
+      {/* Invisible Turnstile widget. No-op when site key is unset. */}
+      <TurnstileWidget onToken={setTurnstileToken} action="director" />
 
       {/* Progress dots */}
       <div role="progressbar" aria-valuenow={step + 1} aria-valuemin={1} aria-valuemax={STEPS.length}

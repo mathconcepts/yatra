@@ -25,6 +25,19 @@
 
 const DEFAULT_SAMPLE_RATE = 48000;
 
+// Lazy-loaded to keep this file usable in non-Vite test envs.
+let _readUserSettings = null;
+async function loadReadUserSettings() {
+  if (_readUserSettings) return _readUserSettings;
+  try {
+    const mod = await import("./userSettings.js");
+    _readUserSettings = mod.readUserSettings;
+    return _readUserSettings;
+  } catch {
+    return () => ({});
+  }
+}
+
 /** Pure: silence of the requested duration. */
 export function synthesizeSilence(durationS, sampleRate = DEFAULT_SAMPLE_RATE) {
   const len = Math.max(0, Math.floor(durationS * sampleRate));
@@ -193,16 +206,26 @@ export async function synthesizeScenes({
   if (!workerBase) {
     throw new Error("VITE_DIRECTOR_WORKER_URL is not set. Set mode='silent' to bypass.");
   }
+  // Auto-pull BYOK key + (caller may still override) so callers don't
+  // have to thread settings through every layer.
+  let effectiveUserTtsKey = userTtsKey;
+  let effectiveWorkerBase = workerBase;
+  if (effectiveUserTtsKey === undefined) {
+    const read = await loadReadUserSettings();
+    const s = read();
+    if (s.googleTtsKey) effectiveUserTtsKey = s.googleTtsKey;
+    if (s.workerUrl && s.workerUrl.trim()) effectiveWorkerBase = s.workerUrl.trim();
+  }
   for (const s of scenes) {
     const buf = await synthesizeSceneLive(s, {
       palette,
       language,
       sampleRate,
-      workerBase,
+      workerBase: effectiveWorkerBase,
       fetchImpl,
       decodeAudio,
       signal,
-      userTtsKey,
+      userTtsKey: effectiveUserTtsKey,
       turnstileToken,
     });
     out.push(buf);
