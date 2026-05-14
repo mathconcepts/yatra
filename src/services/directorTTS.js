@@ -67,15 +67,19 @@ export function synthesizeTone(durationS, sampleRate = DEFAULT_SAMPLE_RATE, { fr
 function resolveMode(explicit) {
   if (explicit === "silent" || explicit === "tone" || explicit === "live") return explicit;
   try {
-    // Dev with MOCK=1 picks "tone" (audible scene markers) so the
-    // exported MP4 has hearable audio while the Worker stays offline.
-    // Set VITE_DIRECTOR_TTS_MODE=silent explicitly if you want quiet.
+    // Explicit override always wins.
     const env = import.meta.env || {};
     const explicitEnv = env.VITE_DIRECTOR_TTS_MODE;
     if (explicitEnv === "silent" || explicitEnv === "tone" || explicitEnv === "live") {
       return explicitEnv;
     }
-    if (env.VITE_DIRECTOR_MOCK === "1") return "tone";
+    // MOCK dev mode → silent narration. The mock script generator
+    // emits real captions for every landmark / tour stop, so the MP4
+    // still tells the story visually. The audio track is silent
+    // (a buzzing sine is too distracting for review). Set
+    // VITE_DIRECTOR_TTS_MODE=tone to get scene-boundary tones, or =live
+    // for real Google TTS via the Worker.
+    if (env.VITE_DIRECTOR_MOCK === "1") return "silent";
   } catch { /* not in vite env */ }
   return "live";
 }

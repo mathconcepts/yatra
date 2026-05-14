@@ -162,24 +162,12 @@ export async function generateScript({
       await new Promise((r) => setTimeout(r, 400));
       return hit;
     }
-    // Mock miss: synthesize a one-scene placeholder so the pipeline keeps
-    // flowing for routes we haven't hand-authored yet.
-    return {
-      routeId: config.id,
-      tone,
-      language,
-      scenes: [
-        {
-          id: "origin",
-          tStart: 0,
-          tEnd: 30,
-          narration: `[mock] ${config.title}`,
-          captionText: config.title,
-          captionStyle: "headline",
-        },
-      ],
-      meta: { scriptModel: "mock-fallback", totalDurationS: 30, wordCount: 0 },
-    };
+    // Mock miss: synthesize a real multi-scene script from the request
+    // body so the user sees landmarks + captions on screen even without
+    // a Worker. This is intentionally rich — the v1.6 placeholder was a
+    // single scene that hid landmark visibility.
+    await new Promise((r) => setTimeout(r, 250));
+    return buildMockScenesFromBody(body, totalDurationS || 30);
   }
 
   // Worker path (no BYOK Anthropic). Settings.workerUrl override wins
@@ -209,5 +197,114 @@ export async function generateScript({
   }
   return res.json();
 }
+
+/**
+ * Pure: turn a /v1/script request body (built by buildScriptRequest OR
+ * buildTourScriptRequest) into a realistic multi-scene mock script.
+ *
+ * Tour mode: one scene per tour-stop peakMoment, with the curated facts
+ * baked into the narration. The renderer surfaces narration AND
+ * captionText, so even when MP4 audio is silent (dev MOCK) the viewer
+ * sees the landmark name + a 1-line description on screen.
+ *
+ * Point-to-point: one scene per peakMoment chip (origin, destination,
+ * each landmark, steepest climb / longest stretch markers). Scenes are
+ * evenly spaced over `totalDurationS`. Captions use the landmark blurb
+ * trimmed to ~12 words.
+ *
+ * Exported for tests + reuse.
+ */
+export function buildMockScenesFromBody(body, totalDurationS = 30) {
+  const peaks = Array.isArray(body?.peakMoments) ? body.peakMoments : [];
+  const landmarksById = new Map((body?.landmarks || []).map((l) => [l.id || l.name, l]));
+  const isTour = body?.mode === "tour";
+
+  if (peaks.length === 0) {
+    return {
+      routeId: body?.routeId || "unknown",
+      tone: body?.tone || "devotional",
+      language: body?.language || "en",
+      scenes: [
+        {
+          id: "title",
+          tStart: 0,
+          tEnd: totalDurationS,
+          narration: body?.routeTitle || "A journey",
+          captionText: body?.routeTitle || "A journey",
+          captionStyle: "headline",
+        },
+      ],
+      meta: { scriptModel: "mock-fallback", totalDurationS, wordCount: 1 },
+    };
+  }
+
+  let scenes;
+  if (isTour) {
+    // Tour mode: each peak already has its own durationS. Honor them.
+    let cursor = 0;
+    scenes = peaks.map((p, i) => {
+      const lm = landmarksById.get(p.poiId) || {};
+      const dur = Math.max(2, Number(p.durationS) || totalDurationS / peaks.length);
+      const tStart = cursor;
+      const tEnd = Math.min(totalDurationS, cursor + dur);
+      cursor = tEnd;
+      const fact = lm.facts?.[0] || lm.narrationHint || "";
+      const narration = fact
+        ? `${p.label}. ${truncWords(fact, 18)}`
+        : `${p.label}.`;
+      return {
+        id: p.poiId || `stop-${i}`,
+        tStart: round1(tStart),
+        tEnd: round1(tEnd),
+        narration,
+        captionText: p.label,
+        captionStyle: i === 0 ? "headline" : "subtitle",
+      };
+    });
+    // If rounding left a tail, extend the last scene to total.
+    if (scenes.length > 0) scenes[scenes.length - 1].tEnd = totalDurationS;
+  } else {
+    // Point-to-point: evenly space peaks across the duration.
+    const n = peaks.length;
+    const slice = totalDurationS / n;
+    scenes = peaks.map((p, i) => {
+      const lm = (body.landmarks || []).find((l) => l.name === p.label) || {};
+      const fact = lm.facts?.[0] || "";
+      const narration = fact
+        ? `${p.label}. ${truncWords(fact, 16)}`
+        : `${p.label}.`;
+      return {
+        id: p.kind === "origin" || p.kind === "destination" ? p.kind : `peak-${i}`,
+        tStart: round1(i * slice),
+        tEnd: round1((i + 1) * slice),
+        narration,
+        captionText: p.label,
+        captionStyle: (p.kind === "origin" || p.kind === "destination") ? "headline" : "subtitle",
+      };
+    });
+  }
+
+  return {
+    routeId: body?.routeId || "unknown",
+    tone: body?.tone || "devotional",
+    language: body?.language || "en",
+    scenes,
+    meta: {
+      scriptModel: "mock-fallback",
+      totalDurationS,
+      wordCount: scenes.reduce((a, s) => a + s.narration.split(/\s+/).length, 0),
+      via: isTour ? "mock-tour" : "mock-pp",
+    },
+  };
+}
+
+function truncWords(s, n) {
+  if (typeof s !== "string") return "";
+  const words = s.trim().split(/\s+/);
+  if (words.length <= n) return s.trim();
+  return words.slice(0, n).join(" ") + "…";
+}
+
+function round1(n) { return Math.round(n * 10) / 10; }
 
 export const __internals = { MOCK_FIXTURES, isMockMode, getWorkerBase };
