@@ -730,6 +730,110 @@ body {
  *  MEMORY COMPOSER (v3.1 Slice A — scaffold)
  * ═══════════════════════════════════════════════════════════════════ */
 
+/* ─── M3: Mobile polish (Android-first PWA) ───────────────────── */
+
+/* Make all wizard buttons + toggles meet a 44pt minimum touch target. */
+@media (pointer: coarse), (max-width: 768px) {
+  .director-tone, .director-lang, .jm-btn, .jm-btn-ghost {
+    min-height: 44px;
+  }
+  .director-cta {
+    min-height: 52px;
+    font-size: 1rem;
+  }
+}
+
+/* Narrow viewports: stack wizard rows vertically; full-width inputs. */
+@media (max-width: 480px) {
+  .director-root {
+    padding: 0.75rem;
+  }
+  .director-title {
+    font-size: 1.6rem !important;
+  }
+  .director-row {
+    display: block;
+    width: 100%;
+  }
+  .director-row > * {
+    width: 100%;
+  }
+  .director-tone-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 6px !important;
+  }
+  .director-lang-chips {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  /* Sticky bottom nav so Back / Next stays in reach. */
+  .director-root > div:last-of-type {
+    /* The Back/Next div is the last when stage==='idle'. Sticky helps
+       reachability on a 6-inch screen. */
+  }
+  .director-sticky-nav {
+    position: sticky;
+    bottom: 0;
+    padding: 0.5rem 0 0.6rem;
+    background: linear-gradient(180deg, transparent 0%, rgba(8, 12, 18, 0.92) 30%);
+    margin: 0 -0.75rem -0.75rem;
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+    z-index: 5;
+  }
+  /* Surface toggle column: shrink width + smaller font on phones. */
+  .jm-surface-toggles {
+    bottom: 8px;
+    right: 8px;
+    gap: 6px;
+  }
+  .jm-surface-toggles .jm-surface-toggle {
+    width: 132px;
+    font-size: 0.78rem;
+    padding: 0.5rem 0.6rem;
+  }
+  /* Atlas map shrinks; controls strip gets larger touch targets. */
+  .jm-map-canvas {
+    height: 380px !important;
+  }
+  .jm-controls {
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 10px;
+  }
+  .jm-btn {
+    padding: 10px 14px;
+    min-width: 86px;
+  }
+  /* Settings + composer use full screen. */
+  .director-root {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+}
+
+/* Larger phones / small tablets: still mobile-friendly. */
+@media (max-width: 768px) {
+  .director-tone-grid {
+    grid-template-columns: 1fr 1fr 1fr !important;
+  }
+  .jm-firstrun-title {
+    font-size: 2rem !important;
+  }
+}
+
+/* First-run picker mobile tuning. */
+@media (max-width: 480px) {
+  .jm-firstrun {
+    padding: 1.25rem;
+    justify-content: flex-start;
+    padding-top: 2.5rem;
+  }
+  .jm-firstrun-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
 /* ─── First-run location picker ────────────────────────────────── */
 .jm-firstrun {
   position: fixed; inset: 0;

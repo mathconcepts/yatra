@@ -21,6 +21,11 @@
  *
  * @property {Route[]}    routes    ★ one or more paths (min 1)
  * @property {Landmark[]} landmarks   POIs that trigger postcards
+ * @property {Tour[]}     [tours]     POI circuits for Director's "tour" mode
+ *                                    (Yatra v1.8). Each tour names which
+ *                                    landmark ids to visit and in what order.
+ *                                    Optional — locations without tours stay
+ *                                    on the point-to-point Director path.
  *
  * @property {"foot"|"road"|"rail"|"mixed"} [mode]   travel mode for the
  *                                                    journey overall; used
@@ -63,6 +68,37 @@
  * @property {"gateway"|"milestone"|"shrine"|"destination"} type
  * @property {string} blurb   one-paragraph contextual narrative
  * @property {string} [ritual] short ritual / action label
+ * @property {SubTemplate} [subTemplate]   optional per-POI rendering
+ *                                          overrides used when the landmark
+ *                                          is the focus of a tour scene.
+ *                                          Lets one location config carry
+ *                                          rich, per-POI narration without
+ *                                          needing a separate top-level
+ *                                          file. (Yatra v1.8)
+ *
+ * @typedef {Object} SubTemplate
+ * @property {string} [narrationHint]      a 1-2 sentence directive the AI
+ *                                          should honor when this POI is on
+ *                                          screen. Concrete, not generic.
+ * @property {string[]} [curatedFacts]     verified facts the AI may state.
+ *                                          The prompt forbids inventing
+ *                                          religious/historical claims; this
+ *                                          is the safe set.
+ * @property {string} [architectureBlurb]  a short architectural detail for
+ *                                          the postcard / arch overlay.
+ * @property {string} [wikimediaTitle]     Commons page title for the
+ *                                          architecture-fetcher module (M2).
+ * @property {string[]} [aliases]          alternative names (e.g. Tamil,
+ *                                          historical) the AI may use.
+ *
+ * @typedef {Object} Tour
+ * @property {string} id           stable id (e.g. "srirangam-temples")
+ * @property {string} name         display name (e.g. "Two great temples of Srirangam")
+ * @property {string} [subtitle]   optional one-liner
+ * @property {string[]} pois       ordered landmark ids to visit. MUST match
+ *                                  ids in the location's landmarks[] array.
+ * @property {Object} [stats]      { distanceKm?, durationHr? } summary
+ * @property {string} [color]      hex accent for this tour
  *
  * @typedef {Object} Topography
  * @property {"topo"|"imagery"|"relief"} basemap
