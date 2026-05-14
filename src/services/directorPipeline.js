@@ -83,6 +83,8 @@ export async function runDirectorPipeline({
   coverageWeights = null, // tour-mode timing: "equal" | "single:<poiId>" | { [poiId]: number }
   poiSubset = null,       // tour-mode subset of POIs to include (Set<id> or Array<id>)
   bgmBuffer = null,       // optional decoded BGM AudioBuffer (M2); null = narrator only
+  bgmStartOffsetS = 0,    // start the BGM clip at this offset (seconds) inside the source track
+  prerecordedTracks = null, // Float32Array[] from the teleprompter mic recorder; one per scene
   totalDurationS = 30,    // video duration in seconds. Configurable (15/30/60/90); 30 by default.
   voiceOverride = null,  // Google TTS voice id chosen by user in the wizard; undefined → palette default
   turnstileToken = null, // Cloudflare Turnstile token from widget; forwarded to Worker calls
@@ -133,6 +135,7 @@ export async function runDirectorPipeline({
     signal,
     turnstileToken,
     voiceOverride,
+    prerecordedTracks,
   });
 
   // 3. Mix audio (always produced even if the MP4 stays silent at v1.6.7)
@@ -153,6 +156,7 @@ export async function runDirectorPipeline({
         bgmBuffer,
         narrationWindows: deriveNarrationWindows(scenes),
         createBuffer: createAudioBuffer,
+        bgmStartOffsetS,
       });
     }
   }
