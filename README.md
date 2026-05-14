@@ -180,6 +180,107 @@ The location switcher (top of the page) automatically lists all registered locat
 - **Weather card stuck on "Fetching…"** — Open-Meteo may be rate-limiting or down. The rest of the app keeps working.
 - **CORS error on tiles** — only if you've added a tile source that doesn't allow it. ESRI / OpenTopoMap / OpenStreetMap all do; Bhuvan / older corporate tile servers may not.
 
+## Deploying to Cloudflare Pages
+
+Yatra deploys as a static Vite bundle plus the `workers/yatra-director`
+Cloudflare Worker. Front-end + Worker can live on the same Cloudflare
+account, billed against the same free tier.
+
+### 1. Deploy the Worker first
+
+The Worker URL is baked into the production bundle, so it needs to exist
+before the front-end is built.
+
+```
+cd workers/yatra-director
+npm install
+cp wrangler.toml.example wrangler.toml
+```
+
+Edit `wrangler.toml`: set `account_id`, uncomment the KV / DO / migration
+blocks. Then provision the bindings and secrets:
+
+```
+wrangler kv namespace create BUDGET_KV
+wrangler kv namespace create SCRIPT_CACHE
+wrangler kv namespace create TTS_CACHE
+```
+
+Paste the printed namespace IDs into `wrangler.toml`. Then secrets:
+
+```
+wrangler secret put ANTHROPIC_API_KEY
+wrangler secret put GOOGLE_TTS_API_KEY
+wrangler secret put TURNSTILE_SECRET_KEY
+wrangler deploy
+```
+
+Note the URL it prints: `https://yatra-director.<your-sub>.workers.dev`.
+
+See `workers/yatra-director/README.md` for the full Google TTS GCP-side
+setup walkthrough if you haven't done it yet.
+
+### 2. Set up Turnstile
+
+At https://dash.cloudflare.com/?to=/:account/turnstile, create a site
+with mode **Invisible** and hostname matching your Pages URL. Copy the
+**site key** (front-end, public) and **secret key** (Worker — already
+provisioned in step 1 via `wrangler secret put TURNSTILE_SECRET_KEY`).
+
+### 3. Build the front-end with production env
+
+```
+cp .env.production.example .env.production
+```
+
+Edit `.env.production`:
+
+```
+VITE_DIRECTOR_MOCK=0
+VITE_DIRECTOR_WORKER_URL=https://yatra-director.<your-sub>.workers.dev
+VITE_TURNSTILE_SITE_KEY=<site key from step 2>
+```
+
+Then build:
+
+```
+npm run build
+```
+
+### 4. Deploy to Cloudflare Pages
+
+```
+npx wrangler pages deploy dist --project-name yatra
+```
+
+Cloudflare prints a preview URL on first deploy. Subsequent deploys get
+their own per-build preview URLs; promoting to production attaches
+`https://yatra.pages.dev` and any custom domain.
+
+The Worker's CORS allowlist already includes `*.yatra.pages.dev` by
+regex — no Worker redeploy needed for preview URLs. For a custom domain,
+add it to `CORS_PATTERNS` in `workers/yatra-director/src/index.js` and
+redeploy the Worker.
+
+### 5. Smoke-test the deploy
+
+1. Open your Pages URL.
+2. Switch to Director (`?surface=director`).
+3. Run "AI Autopilot" — should produce an MP4 + postcard end-to-end.
+4. DevTools → Network: confirm `/v1/script` and `/v1/tts` hit your
+   Worker URL, return 200, and the `X-Yatra-Cache` header reads `miss`
+   on first call and `hit` on the second.
+5. Optional BYOK test: Settings → paste your own Google TTS key → Test
+   → green → Save → re-run Director. `X-Yatra-Cache` should now read
+   `byok-bypass` for TTS calls.
+
+### Self-hosting
+
+A power user who wants to route ALL Director calls to their own Worker
+can paste the URL into Settings → Custom Worker URL. The type-to-confirm
+modal protects against accidental exfiltration of any saved Google TTS
+key + Turnstile token to a hostile URL.
+
 ## License
 
 MIT — do what you like.
