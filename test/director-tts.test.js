@@ -237,16 +237,54 @@ describe("synthesizeScenes", () => {
     expect(tracks).toHaveLength(2);
   });
 
-  it("live mode without workerBase fails loudly", async () => {
-    await expect(
-      synthesizeScenes({
-        scenes,
-        palette: devotional,
-        language: "te",
-        mode: "live",
-        workerBase: "",
-      }),
-    ).rejects.toThrow(/VITE_DIRECTOR_WORKER_URL|workerBase/i);
+  it("live mode without workerBase gracefully degrades to silent (was: throw)", async () => {
+    // Older behavior was to throw "VITE_DIRECTOR_WORKER_URL is not set."
+    // New behavior: silently produce silent tracks + a degradedReason
+    // tag so the render proceeds and the captions still tell the story.
+    const out = await synthesizeScenes({
+      scenes,
+      palette: devotional,
+      language: "te",
+      mode: "live",
+      workerBase: "",
+    });
+    expect(out.mode).toBe("silent");
+    expect(out.degradedReason).toBe("no-worker-url");
+    expect(out.tracks).toHaveLength(scenes.length);
+    // Each track is silence of the right length.
+    for (let i = 0; i < scenes.length; i++) {
+      const expectedSamples = Math.floor((scenes[i].tEnd - scenes[i].tStart) * 48000);
+      expect(out.tracks[i].length).toBe(expectedSamples);
+    }
+  });
+
+  it("live mode without decodeAudio gracefully degrades to silent", async () => {
+    const out = await synthesizeScenes({
+      scenes,
+      palette: devotional,
+      language: "te",
+      mode: "live",
+      workerBase: "https://example.workers.dev",
+      // decodeAudio intentionally omitted
+    });
+    expect(out.mode).toBe("silent");
+    expect(out.degradedReason).toBe("no-audio-context");
+  });
+
+  it("live mode with all per-scene fetches failing returns silent with all-scenes-failed", async () => {
+    const failingFetch = () => Promise.reject(new TypeError("network down"));
+    const decode = async () => new Float32Array(0);
+    const out = await synthesizeScenes({
+      scenes,
+      palette: devotional,
+      language: "te",
+      mode: "live",
+      workerBase: "https://example.workers.dev",
+      fetchImpl: failingFetch,
+      decodeAudio: decode,
+    });
+    expect(out.mode).toBe("silent");
+    expect(out.degradedReason).toBe("all-scenes-failed");
   });
 
   it("rejects empty / invalid inputs", async () => {

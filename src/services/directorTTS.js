@@ -234,9 +234,17 @@ export async function synthesizeScenes({
     return { tracks: out, mode: "tone" };
   }
 
-  // live
+  // live mode — graceful degrade when prerequisites are missing.
+  // Returning silent (instead of throwing) lets the video render so
+  // the user gets something playable. The captions burn-in still tells
+  // the story; only the spoken narration is absent.
   if (!workerBase) {
-    throw new Error("VITE_DIRECTOR_WORKER_URL is not set. Set mode='silent' to bypass.");
+    for (const s of scenes) out.push(synthesizeSilence(s.tEnd - s.tStart, sampleRate));
+    return { tracks: out, mode: "silent", degradedReason: "no-worker-url" };
+  }
+  if (typeof decodeAudio !== "function") {
+    for (const s of scenes) out.push(synthesizeSilence(s.tEnd - s.tStart, sampleRate));
+    return { tracks: out, mode: "silent", degradedReason: "no-audio-context" };
   }
   // Auto-pull BYOK key + (caller may still override) so callers don't
   // have to thread settings through every layer.
@@ -248,22 +256,38 @@ export async function synthesizeScenes({
     if (s.googleTtsKey) effectiveUserTtsKey = s.googleTtsKey;
     if (s.workerUrl && s.workerUrl.trim()) effectiveWorkerBase = s.workerUrl.trim();
   }
+  // Per-scene resilience: if one scene's TTS fails (network, decode,
+  // Worker hiccup), fill it with silence and continue. The film still
+  // renders end-to-end; the user hears the rest of the narration.
+  let degradedScenes = 0;
   for (const s of scenes) {
-    const buf = await synthesizeSceneLive(s, {
-      palette,
-      language,
-      sampleRate,
-      workerBase: effectiveWorkerBase,
-      fetchImpl,
-      decodeAudio,
-      signal,
-      userTtsKey: effectiveUserTtsKey,
-      turnstileToken,
-      voiceOverride,
-    });
+    let buf;
+    try {
+      buf = await synthesizeSceneLive(s, {
+        palette,
+        language,
+        sampleRate,
+        workerBase: effectiveWorkerBase,
+        fetchImpl,
+        decodeAudio,
+        signal,
+        userTtsKey: effectiveUserTtsKey,
+        turnstileToken,
+        voiceOverride,
+      });
+    } catch (err) {
+      if (signal?.aborted) throw err; // honor cancellation
+      degradedScenes++;
+      buf = synthesizeSilence(s.tEnd - s.tStart, sampleRate);
+    }
     out.push(buf);
   }
-  return { tracks: out, mode: "live" };
+  // If every scene was filled with silence, surface that as a "silent"
+  // mode so the UI ("Audio mixer ran in <mode>") matches reality.
+  if (degradedScenes === scenes.length) {
+    return { tracks: out, mode: "silent", degradedReason: "all-scenes-failed" };
+  }
+  return { tracks: out, mode: "live", degradedScenes };
 }
 
 /**

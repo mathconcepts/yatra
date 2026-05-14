@@ -252,6 +252,9 @@ export default function DirectorView({ locations = {}, initialLocationId, atlasC
     setProgressMsg(STAGE_LABELS.script);
     setProgressDetail("");
     abortRef.current = new AbortController();
+    // Declared at function scope so the finally block can close it
+    // even when onDirect bails early.
+    let _audioCtx = null;
 
     try {
       const [{ createOffscreenReelRenderer }, { encodeMp4 }] = await Promise.all([
@@ -261,26 +264,48 @@ export default function DirectorView({ locations = {}, initialLocationId, atlasC
 
       let createAudioBuffer;
       let bgmBuffer = null;
+      let decodeAudio = null;
       try {
         if (typeof OfflineAudioContext !== "undefined") {
           createAudioBuffer = (n, len, sr) => new OfflineAudioContext(n, len, sr).createBuffer(n, len, sr);
         }
       } catch { /* not available */ }
-      // Load BGM. Priority: user-uploaded file > catalog track URL.
+      // Construct decodeAudio for live-TTS mode. The Worker returns
+      // MP3 bytes; synthesizeSceneLive needs a way to turn those into
+      // a Float32Array. Browsers expose this via AudioContext.
+      // Reuses a single AudioContext for both BGM loading + TTS decode.
       if (typeof AudioContext !== "undefined") {
-        const ctx = new AudioContext();
+        _audioCtx = new AudioContext();
+        decodeAudio = async (arrayBuffer, targetSampleRate) => {
+          const decoded = await _audioCtx.decodeAudioData(arrayBuffer.slice(0));
+          // Collapse to mono Float32 at the requested project sample rate.
+          const channels = decoded.numberOfChannels || 1;
+          const srcLen = decoded.length;
+          const ratio = decoded.sampleRate / targetSampleRate;
+          const out = new Float32Array(Math.floor(srcLen / ratio));
+          for (let ch = 0; ch < channels; ch++) {
+            const data = decoded.getChannelData(ch);
+            for (let i = 0; i < out.length; i++) {
+              const idx = Math.min(srcLen - 1, Math.floor(i * ratio));
+              out[i] += data[idx] / channels;
+            }
+          }
+          return out;
+        };
+      }
+      // Load BGM. Priority: user-uploaded file > catalog track URL.
+      if (_audioCtx) {
         try {
           if (bgmFile) {
             const ab = await bgmFile.arrayBuffer();
-            bgmBuffer = await ctx.decodeAudioData(ab);
+            bgmBuffer = await _audioCtx.decodeAudioData(ab);
           } else {
             const track = getBgmTrack(bgmId);
             if (track?.url) {
-              bgmBuffer = await loadBgm({ url: track.url, audioContext: ctx });
+              bgmBuffer = await loadBgm({ url: track.url, audioContext: _audioCtx });
             }
           }
         } catch { /* BGM unavailable — proceed without */ }
-        ctx.close?.();
       }
 
       const out = await runDirectorPipeline({
@@ -304,6 +329,7 @@ export default function DirectorView({ locations = {}, initialLocationId, atlasC
         makeRenderer: createOffscreenReelRenderer,
         encodeMp4Impl: encodeMp4,
         createAudioBuffer,
+        decodeAudio,
         onProgress: ({ stage: s, frame, total, message }) => {
           if (message) setProgressMsg(message);
           else if (STAGE_LABELS[s]) setProgressMsg(STAGE_LABELS[s]);
@@ -321,6 +347,9 @@ export default function DirectorView({ locations = {}, initialLocationId, atlasC
       setStage("error");
     } finally {
       abortRef.current = null;
+      // Close the AudioContext we opened for BGM + TTS decode so the
+      // OS audio indicator goes away.
+      try { _audioCtx?.close?.(); } catch { /* already closed */ }
     }
   }
 
