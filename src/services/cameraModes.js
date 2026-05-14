@@ -34,10 +34,14 @@ export function applyCameraMode(baseCam, { mode = "default", t = 0, baseZoom = 1
   const safeT = Math.max(0, Math.min(1, t));
   switch (mode) {
     case "birdseye":
+      // -1.2 (was -2): less aggressive zoom-out so the marker's motion
+      // across the map is visible on short routes (e.g. the 11 km
+      // Tirupati→Tirumala trail). The route still fits comfortably in
+      // the frame; the map background visibly shifts as the marker travels.
       return {
         ...baseCam,
         pitch: 0,
-        zoom: clamp(baseZoom - 2, 4, 20),
+        zoom: clamp(baseZoom - 1.2, 4, 20),
         bearing: 0,
       };
     case "chase":

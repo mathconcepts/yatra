@@ -139,6 +139,7 @@ export default function DirectorView({ locations = {}, initialLocationId, atlasC
   const [recorderOpen, setRecorderOpen] = useState(false);
   const [recordedScenes, setRecordedScenes] = useState(null); // Float32Array[] | null
   const [scriptForRecording, setScriptForRecording] = useState(null); // generated script preview
+  const [recorderError, setRecorderError] = useState("");
 
   const [stage, setStage] = useState("idle"); // idle | running | done | error
   const [progressMsg, setProgressMsg] = useState("");
@@ -328,24 +329,52 @@ export default function DirectorView({ locations = {}, initialLocationId, atlasC
   /** Generate the script preview, then open the teleprompter recorder. */
   async function openRecorder() {
     if (!route) return;
+    setRecorderError("");
     setRecorderOpen(true);
+    const args = {
+      config: route, tone, language,
+      personalContext: applyTravelerProfile(personalNote, profileId),
+      routeVariantId: selectedTrail?.id || null,
+      mode,
+      tourId: mode === "tour" ? selectedTour?.id || null : null,
+      coverageWeights: effectiveCoverage,
+      poiSubset: mode === "tour" ? activePoiIds : null,
+      totalDurationS,
+    };
+    let script = null;
     try {
       const { generateScript } = await import("../../services/directorScript.js");
-      const script = await generateScript({
-        config: route, tone, language,
-        personalContext: applyTravelerProfile(personalNote, profileId),
-        routeVariantId: selectedTrail?.id || null,
-        mode,
-        tourId: mode === "tour" ? selectedTour?.id || null : null,
-        coverageWeights: effectiveCoverage,
-        poiSubset: mode === "tour" ? activePoiIds : null,
-        totalDurationS,
-      });
-      setScriptForRecording(script);
+      script = await generateScript(args);
     } catch (err) {
-      setRecorderOpen(false);
-      setErrorMsg(err?.message || "Could not prepare the script for recording.");
+      // Real path failed (no Worker, missing prompt, network). For the
+      // recorder we only need a SCRIPT to read aloud — the user provides
+      // the audio themselves. Fall back to the deterministic mock script
+      // built from the config's landmarks so the teleprompter never
+      // leaves the user stuck.
+      try {
+        const [
+          { buildScriptRequest, buildMockScenesFromBody },
+          { buildTourScriptRequest },
+        ] = await Promise.all([
+          import("../../services/directorScript.js"),
+          import("../../services/tourScript.js"),
+        ]);
+        const body = args.mode === "tour" && args.tourId
+          ? buildTourScriptRequest(args)
+          : buildScriptRequest(args);
+        script = buildMockScenesFromBody(body, totalDurationS);
+      } catch (err2) {
+        setRecorderOpen(false);
+        setRecorderError(`${err?.message || err} (fallback also failed: ${err2?.message || err2})`);
+        return;
+      }
     }
+    if (!script || !Array.isArray(script.scenes) || script.scenes.length === 0) {
+      setRecorderOpen(false);
+      setRecorderError("Script came back empty — nothing to record against.");
+      return;
+    }
+    setScriptForRecording(script);
   }
 
   const currentStep = STEPS[step];
@@ -635,11 +664,22 @@ export default function DirectorView({ locations = {}, initialLocationId, atlasC
             {narrationSource === "record" && (
               <div style={{ marginTop: "0.8rem" }}>
                 {!recordedScenes && (
-                  <button type="button" onClick={openRecorder}
-                          style={{ padding: "0.6rem 1rem", borderRadius: 6, border: "none", cursor: "pointer",
-                                   background: "#8a4528", color: "#f4e8d0", fontWeight: 600 }}>
+                  <button type="button" onClick={openRecorder} disabled={recorderOpen}
+                          style={{ padding: "0.6rem 1rem", borderRadius: 6, border: "none",
+                                   cursor: recorderOpen ? "default" : "pointer",
+                                   background: "#8a4528", color: "#f4e8d0", fontWeight: 600,
+                                   opacity: recorderOpen ? 0.6 : 1 }}>
                     {recorderOpen ? "Generating script…" : "Open recorder →"}
                   </button>
+                )}
+                {recorderError && (
+                  <div role="alert" style={{
+                    marginTop: "0.6rem", padding: "0.5rem 0.7rem", borderRadius: 4,
+                    background: "rgba(180,60,60,0.18)", border: "1px solid rgba(180,60,60,0.4)",
+                    color: "#f4a3a3", fontSize: "0.85rem",
+                  }}>
+                    {recorderError}
+                  </div>
                 )}
                 {recordedScenes && (
                   <div style={{ padding: "0.6rem 0.8rem", borderRadius: 6, background: "rgba(80,160,90,0.15)",

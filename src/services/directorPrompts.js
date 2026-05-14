@@ -15,11 +15,16 @@
  * is the only file that needs to change — callers see a sync getter.
  */
 
-import devotionalMd from "../../workers/yatra-director/prompts/devotional.md?raw";
+import devotionalMd  from "../../workers/yatra-director/prompts/devotional.md?raw";
+import explorerMd    from "../../workers/yatra-director/prompts/explorer.md?raw";
+import poeticMd      from "../../workers/yatra-director/prompts/poetic.md?raw";
+import historicalMd  from "../../workers/yatra-director/prompts/historical.md?raw";
 
 const SOURCES = {
   devotional: devotionalMd,
-  // explorer / poetic / historical land alongside their .md files.
+  explorer:   explorerMd,
+  poetic:     poeticMd,
+  historical: historicalMd,
 };
 
 /**
@@ -42,8 +47,15 @@ export function extractSystemPrompt(markdown) {
  */
 export function getSystemPrompt(tone) {
   const raw = SOURCES[tone];
-  if (typeof raw !== "string") {
-    throw new Error(`directorPrompts: no markdown source for tone "${tone}"`);
+  if (typeof raw === "string") return extractSystemPrompt(raw);
+  // Unknown tone (e.g. a future palette that doesn't have a prompt yet):
+  // fall back to devotional + a one-line tone hint rather than throwing.
+  // The film still renders; the AI gets a clear instruction to use the
+  // requested tone label as its register.
+  const fallback = SOURCES.devotional;
+  if (typeof fallback === "string") {
+    return `Tone register: "${tone}". Adapt the narration voice accordingly.\n\n` +
+      extractSystemPrompt(fallback);
   }
-  return extractSystemPrompt(raw);
+  throw new Error(`directorPrompts: no markdown source for tone "${tone}"`);
 }
