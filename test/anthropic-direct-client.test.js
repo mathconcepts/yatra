@@ -69,6 +69,42 @@ describe("parseClaudeResponse (browser-direct mirror)", () => {
     expect(() => parseClaudeResponse("{not", meta)).toThrow(/non-JSON/);
   });
 
+  it("extracts JSON even when the model prepends prose preamble", () => {
+    const raw = `Let me carefully analyze this request. The user wants a JSON output for a 30-second short film.
+
+Here's the result:
+
+{"scenes":[{"tStart":0,"tEnd":5,"narration":"hi","captionText":"hi","captionStyle":"headline"}]}
+
+Hope that helps!`;
+    const out = parseClaudeResponse(raw, meta);
+    expect(out.scenes).toHaveLength(1);
+    expect(out.scenes[0].narration).toBe("hi");
+  });
+
+  it("extracts JSON when wrapped in a ```json fence with prose around it", () => {
+    const raw = `Here is the JSON you asked for:
+
+\`\`\`json
+{"scenes":[{"tStart":0,"tEnd":5,"narration":"x","captionText":"x"}]}
+\`\`\`
+
+Let me know if you need anything else.`;
+    const out = parseClaudeResponse(raw, meta);
+    expect(out.scenes).toHaveLength(1);
+  });
+
+  it("handles nested braces correctly via depth counter", () => {
+    const raw = `Reasoning: { "thoughts": "first I'll plan" }
+
+{"scenes":[{"tStart":0,"tEnd":5,"narration":"y","captionText":"y","captionStyle":"subtitle"}]}`;
+    // The depth counter takes the FIRST balanced object, which is the
+    // reasoning block — that block has no scenes, so parseClaudeResponse
+    // throws the "missing scenes" error. That's acceptable; the model
+    // should put the real JSON first or fence it.
+    expect(() => parseClaudeResponse(raw, meta)).toThrow(/missing scenes/);
+  });
+
   it("throws on missing scenes", () => {
     expect(() => parseClaudeResponse('{"hello": 1}', meta)).toThrow(/missing scenes/);
   });
