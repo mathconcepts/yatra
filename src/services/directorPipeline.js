@@ -74,6 +74,11 @@ export async function runDirectorPipeline({
   config,
   palette,
   language,
+  personalContext = "",
+  basemap, // "topo" | "imagery" | "relief"; undefined → config default
+  routeVariantId = null, // which config.routes[].id (e.g. "alipiri" / "srivari"); undefined → first route
+  voiceOverride = null,  // Google TTS voice id chosen by user in the wizard; undefined → palette default
+  turnstileToken = null, // Cloudflare Turnstile token from widget; forwarded to Worker calls
   fps = DEFAULT_FPS,
   width = DEFAULT_WIDTH,
   height = DEFAULT_HEIGHT,
@@ -100,7 +105,7 @@ export async function runDirectorPipeline({
 
   // 1. Script
   emit("script", { message: "Composing the narration" });
-  const script = await generate({ config, tone: palette.id, language, signal });
+  const script = await generate({ config, tone: palette.id, language, personalContext, routeVariantId, turnstileToken, signal });
   const scenes = script?.scenes || [];
   if (scenes.length === 0) throw new Error("Director: script produced no scenes");
   const { totalDurationS } = scenesToAudioTiming(scenes);
@@ -115,6 +120,8 @@ export async function runDirectorPipeline({
     sampleRate,
     mode: ttsMode,
     signal,
+    turnstileToken,
+    voiceOverride,
   });
 
   // 3. Mix audio (always produced even if the MP4 stays silent at v1.6.7)
@@ -143,6 +150,7 @@ export async function runDirectorPipeline({
   const renderer = await makeRenderer(config, {
     width,
     height,
+    basemap,
     directorMode: {
       scenes,
       palette,

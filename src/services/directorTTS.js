@@ -25,6 +25,19 @@
 
 const DEFAULT_SAMPLE_RATE = 48000;
 
+// Lazy-loaded to keep this file usable in non-Vite test envs.
+let _readUserSettings = null;
+async function loadReadUserSettings() {
+  if (_readUserSettings) return _readUserSettings;
+  try {
+    const mod = await import("./userSettings.js");
+    _readUserSettings = mod.readUserSettings;
+    return _readUserSettings;
+  } catch {
+    return () => ({});
+  }
+}
+
 /** Pure: silence of the requested duration. */
 export function synthesizeSilence(durationS, sampleRate = DEFAULT_SAMPLE_RATE) {
   const len = Math.max(0, Math.floor(durationS * sampleRate));
@@ -71,11 +84,13 @@ function getWorkerBase() {
  * Build the /v1/tts request payload for a single scene.
  * Pure; exported for testability.
  */
-export function buildTtsRequest({ scene, palette, language }) {
+export function buildTtsRequest({ scene, palette, language, voiceOverride }) {
   if (!scene) throw new Error("buildTtsRequest: scene required");
   if (!palette) throw new Error("buildTtsRequest: palette required");
   if (!language) throw new Error("buildTtsRequest: language required");
-  const voiceId = palette.voice?.voiceIdByLang?.[language];
+  // User-picked voice (from Director wizard "Voice" step) wins over the
+  // palette's default. Both are passed through to /v1/tts as voiceId.
+  const voiceId = voiceOverride || palette.voice?.voiceIdByLang?.[language];
   if (!voiceId) throw new Error(`buildTtsRequest: no voiceId for ${palette.id}/${language}`);
   return {
     tone: palette.id,
@@ -103,15 +118,21 @@ export async function synthesizeSceneLive(scene, {
   fetchImpl = globalThis.fetch,
   decodeAudio,
   signal,
+  userTtsKey,         // BYOK Google TTS key from userSettings
+  turnstileToken,     // Turnstile token captured by widget
+  voiceOverride,      // user-picked voice from Director Voice step
 }) {
   if (!workerBase) throw new Error("synthesizeSceneLive: workerBase required (VITE_DIRECTOR_WORKER_URL)");
   if (typeof fetchImpl !== "function") throw new Error("synthesizeSceneLive: fetchImpl required");
   if (typeof decodeAudio !== "function") throw new Error("synthesizeSceneLive: decodeAudio required");
 
-  const body = buildTtsRequest({ scene, palette, language });
+  const body = buildTtsRequest({ scene, palette, language, voiceOverride });
+  const headers = { "content-type": "application/json" };
+  if (turnstileToken) headers["X-Yatra-Turnstile"] = turnstileToken;
+  if (userTtsKey) headers["X-Yatra-User-TTS-Key"] = userTtsKey;
   const res = await fetchImpl(`${workerBase.replace(/\/$/, "")}/v1/tts`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers,
     body: JSON.stringify(body),
     signal,
   });
@@ -159,6 +180,9 @@ export async function synthesizeScenes({
   fetchImpl,
   decodeAudio,
   signal,
+  userTtsKey,        // BYOK Google TTS key (forwarded to /v1/tts via header)
+  turnstileToken,    // Turnstile token from widget (omitted in dev / BYOK)
+  voiceOverride,     // user-picked voice from Director Voice step
 } = {}) {
   if (!Array.isArray(scenes) || scenes.length === 0) {
     throw new Error("synthesizeScenes: scenes array required");
@@ -186,15 +210,28 @@ export async function synthesizeScenes({
   if (!workerBase) {
     throw new Error("VITE_DIRECTOR_WORKER_URL is not set. Set mode='silent' to bypass.");
   }
+  // Auto-pull BYOK key + (caller may still override) so callers don't
+  // have to thread settings through every layer.
+  let effectiveUserTtsKey = userTtsKey;
+  let effectiveWorkerBase = workerBase;
+  if (effectiveUserTtsKey === undefined) {
+    const read = await loadReadUserSettings();
+    const s = read();
+    if (s.googleTtsKey) effectiveUserTtsKey = s.googleTtsKey;
+    if (s.workerUrl && s.workerUrl.trim()) effectiveWorkerBase = s.workerUrl.trim();
+  }
   for (const s of scenes) {
     const buf = await synthesizeSceneLive(s, {
       palette,
       language,
       sampleRate,
-      workerBase,
+      workerBase: effectiveWorkerBase,
       fetchImpl,
       decodeAudio,
       signal,
+      userTtsKey: effectiveUserTtsKey,
+      turnstileToken,
+      voiceOverride,
     });
     out.push(buf);
   }

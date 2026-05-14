@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildScriptRequest, generateScript } from "../src/services/directorScript.js";
+import { buildScriptRequest, generateScript, suggestPersonalNote } from "../src/services/directorScript.js";
 
 const fakeConfig = {
   id: "yadagiri-gutta",
@@ -43,5 +43,28 @@ describe("directorScript", () => {
     await expect(
       generateScript({ config: fakeConfig, tone: "devotional", language: "te" }),
     ).rejects.toThrow(/VITE_DIRECTOR_WORKER_URL|VITE_DIRECTOR_MOCK/);
+  });
+
+  it("buildScriptRequest carries personalContext when provided (trimmed, capped 500)", () => {
+    const note = "  A return to the hill my grandmother walked.  ";
+    const req = buildScriptRequest({ config: fakeConfig, tone: "devotional", language: "te", personalContext: note });
+    expect(req.personalContext).toBe("A return to the hill my grandmother walked.");
+    const long = "y".repeat(600);
+    const req2 = buildScriptRequest({ config: fakeConfig, tone: "devotional", language: "te", personalContext: long });
+    expect(req2.personalContext.length).toBe(500);
+  });
+
+  it("buildScriptRequest emits empty personalContext when absent", () => {
+    const req = buildScriptRequest({ config: fakeConfig, tone: "devotional", language: "te" });
+    expect(req.personalContext).toBe("");
+  });
+
+  it("suggestPersonalNote returns a tone-shaped default mentioning the route title", () => {
+    const dev = suggestPersonalNote({ config: fakeConfig, tone: "devotional" });
+    expect(dev).toContain("Yadagiri Gutta");
+    const exp = suggestPersonalNote({ config: fakeConfig, tone: "explorer" });
+    expect(exp).toContain("Yadagiri Gutta");
+    // Different tones produce different copy
+    expect(dev).not.toBe(exp);
   });
 });

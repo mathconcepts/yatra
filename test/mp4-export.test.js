@@ -1,5 +1,20 @@
 import { describe, it, expect, vi } from "vitest";
-import { isExportSupported, framePlan, resolveAudioPlan } from "../src/services/mp4Export";
+import { isExportSupported, framePlan, resolveAudioPlan, pickAvcLevelHex, pickAvcCodec } from "../src/services/mp4Export";
+
+describe("pickAvcLevelHex", () => {
+  it("uses level 3.1 for 720x1280@30 (the bug we just fixed)", () => {
+    expect(pickAvcLevelHex(720, 1280, 30)).toBe("1F");
+  });
+  it("uses level 3.0 for SD 640x480@30", () => {
+    expect(pickAvcLevelHex(640, 480, 30)).toBe("1E");
+  });
+  it("uses level 4.0 for 1080p@30", () => {
+    expect(pickAvcLevelHex(1920, 1080, 30)).toBe("28");
+  });
+  it("emits a full avc1.42E0XX codec string", () => {
+    expect(pickAvcCodec(720, 1280, 30)).toBe("avc1.42E01F");
+  });
+});
 
 describe("isExportSupported", () => {
   it("reports unsupported in jsdom (no WebCodecs)", () => {

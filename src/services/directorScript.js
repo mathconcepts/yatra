@@ -12,7 +12,10 @@
  * import schemas from a shared file once the worker lives.
  */
 
-import { detectPeakMoments } from "./peakMoments.js";
+import { detectPeakMoments, selectRouteVariant } from "./peakMoments.js";
+import { readUserSettings } from "./userSettings.js";
+import { callAnthropicDirect } from "./anthropicDirectClient.js";
+import { getSystemPrompt, extractSystemPrompt } from "./directorPrompts.js";
 
 import yadagiriDevotionalTe from "../fixtures/directorScript.yadagiri.devotional.te.json";
 
@@ -41,17 +44,23 @@ function getWorkerBase() {
  * Build the request payload from a Yatra location config. Reuses
  * detectPeakMoments so scenes ARE peak moments (no re-derivation).
  */
-export function buildScriptRequest({ config, tone, language }) {
-  const peaks = detectPeakMoments(config);
-  const route = config.routes?.[0];
+export function buildScriptRequest({ config, tone, language, personalContext = "", routeVariantId }) {
+  const peaks = detectPeakMoments(config, routeVariantId);
+  const route = selectRouteVariant(config, routeVariantId);
   const waypoints = route?.waypoints || [];
-  const landmarks = (config.landmarks || []).map((l) => ({
-    name: l.name,
-    facts: l.curatedFacts || [], // future field; empty for now
-    lat: l.lat,
-    lon: l.lon,
-  }));
-  const distanceKm = route?.distanceKm ?? null;
+  // Filter landmarks to those geographically near the selected route
+  // variant. Srivari Mettu (2.1km steep ascent) shouldn't see the
+  // Alipiri-path landmarks 8km away. We keep landmarks within ~1km of
+  // any waypoint on the chosen trail.
+  const landmarks = (config.landmarks || [])
+    .filter((l) => isNearRoute(l, waypoints))
+    .map((l) => ({
+      name: l.name,
+      facts: l.curatedFacts || l.facts || [],
+      lat: l.lat,
+      lon: l.lon,
+    }));
+  const distanceKm = route?.stats?.distanceKm ?? route?.distanceKm ?? null;
   const elevations = waypoints.map((w) => w.elev).filter((e) => Number.isFinite(e));
   const elevationGainM =
     elevations.length > 1
@@ -59,7 +68,8 @@ export function buildScriptRequest({ config, tone, language }) {
       : null;
   return {
     routeId: config.id,
-    routeTitle: config.title,
+    routeTitle: route?.name ? `${config.title} — ${route.name}` : config.title,
+    routeVariantId: route?.id || null,
     tone,
     language,
     peakMoments: peaks.map((p) => ({ t: p.t, kind: p.kind, label: p.label })),
@@ -67,16 +77,69 @@ export function buildScriptRequest({ config, tone, language }) {
     distanceKm,
     elevationGainM,
     waypointCount: waypoints.length,
+    personalContext: typeof personalContext === "string" ? personalContext.trim().slice(0, 500) : "",
   };
+}
+
+function isNearRoute(landmark, waypoints, thresholdKm = 1) {
+  if (!landmark || !Array.isArray(waypoints) || waypoints.length === 0) return false;
+  if (!Number.isFinite(landmark.lat) || !Number.isFinite(landmark.lon)) return false;
+  for (const wp of waypoints) {
+    if (haversineKm(landmark, wp) <= thresholdKm) return true;
+  }
+  return false;
+}
+
+function haversineKm(a, b) {
+  const R = 6371;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLon = ((b.lon - a.lon) * Math.PI) / 180;
+  const lat1 = (a.lat * Math.PI) / 180;
+  const lat2 = (b.lat * Math.PI) / 180;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+/**
+ * Build an "AI-suggested default" personal note for a given route + tone.
+ * Pure (no LLM call) so it's instant and free. The real LLM personalization
+ * happens later, when the worker weaves this note into the narration.
+ * The user is free to edit or replace the suggestion before directing.
+ */
+export function suggestPersonalNote({ config, tone }) {
+  const title = config?.title || "this journey";
+  const templates = {
+    devotional: `A quiet return to ${title}. In the footsteps of those who walked before.`,
+    explorer: `Tracing the trail to ${title}. Step by step, the path reveals itself.`,
+    poetic: `${title}, held in the slow weather of memory.`,
+    historical: `${title}. A path walked across generations.`,
+  };
+  return templates[tone] || templates.devotional;
 }
 
 /**
  * Fetch a directed script. Returns { scenes, meta }. Throws on transport
  * or schema failure; caller decides whether to retry only-this-stage.
  */
-export async function generateScript({ config, tone, language, signal } = {}) {
+export async function generateScript({ config, tone, language, personalContext = "", routeVariantId, signal, turnstileToken } = {}) {
   if (!config || !tone || !language) {
     throw new Error("generateScript requires {config, tone, language}");
+  }
+
+  const settings = readUserSettings();
+  const body = buildScriptRequest({ config, tone, language, personalContext, routeVariantId });
+
+  // BYOK Anthropic: browser-direct to api.anthropic.com, bypassing our
+  // Worker entirely. Trust model: user's long-lived bearer never touches
+  // our infrastructure. See SECURITY.md "BYOK trust model".
+  if (settings.anthropicKey && !isMockMode()) {
+    const systemPrompt = getSystemPrompt(tone);
+    return callAnthropicDirect({
+      apiKey: settings.anthropicKey,
+      systemPrompt,
+      body,
+      signal,
+    });
   }
 
   if (isMockMode()) {
@@ -108,16 +171,19 @@ export async function generateScript({ config, tone, language, signal } = {}) {
     };
   }
 
-  const base = getWorkerBase();
+  // Worker path (no BYOK Anthropic). Settings.workerUrl override wins
+  // over the build-time env URL.
+  const base = (settings.workerUrl && settings.workerUrl.trim()) || getWorkerBase();
   if (!base) {
     throw new Error(
-      "VITE_DIRECTOR_WORKER_URL is not set. Set it in .env.local or run with VITE_DIRECTOR_MOCK=1 for the canned fixture path.",
+      "VITE_DIRECTOR_WORKER_URL is not set. Set it in .env.local, override it in Settings, or run with VITE_DIRECTOR_MOCK=1 for the canned fixture path.",
     );
   }
-  const body = buildScriptRequest({ config, tone, language });
+  const headers = { "content-type": "application/json" };
+  if (turnstileToken) headers["X-Yatra-Turnstile"] = turnstileToken;
   const res = await fetch(`${base.replace(/\/$/, "")}/v1/script`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers,
     body: JSON.stringify(body),
     signal,
   });

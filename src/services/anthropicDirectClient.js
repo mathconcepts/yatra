@@ -1,37 +1,38 @@
 /**
- * Claude API client for the yatra-director Worker.
+ * Browser-direct Anthropic client for BYOK Anthropic key path.
  *
- * Pure split:
- *   - extractSystemPrompt: pure markdown stripper (everything after `---`)
- *   - buildUserPrompt: pure assembler from the /v1/script request body
- *   - parseClaudeResponse: pure JSON extractor with sanity checks
- *   - callClaude: the only function that touches fetch; thin
+ * Why this exists: the user's Anthropic key is a long-lived bearer
+ * with full account access. Routing it through OUR Worker means any
+ * misconfigured log line or compromised Worker leaks the user's full
+ * account. The cleaner trust model is: browser talks to api.anthropic.com
+ * directly, our infrastructure never sees the key. Anthropic added
+ * browser-direct support in 2024 behind the `anthropic-dangerous-direct-
+ * browser-access: true` header.
  *
- * Pure parts are unit-tested. The fetch path is exercised via integration
- * with a mocked fetch in worker tests.
+ * This client mirrors the shape of workers/yatra-director/claudeClient.js
+ * (same buildUserPrompt, same parseClaudeResponse). The Worker file is
+ * the source of truth for the prompt-building logic; this file imports
+ * the prompts.js bundle directly.
+ *
+ * IMPORTANT: only call this when readUserSettings().anthropicKey is set.
+ * The caller (directorScript) decides which path to take based on BYOK
+ * presence.
+ *
+ * Test note: api.anthropic.com browser-direct CORS must be verified
+ * before this code path can ship to production. The plan's CORS
+ * verification gate (Step 7b in the plan doc) runs that check.
  */
 
+const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
 const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
 const DEFAULT_MAX_TOKENS = 1024;
+const DEFAULT_TIMEOUT_MS = 15000;
 
 /**
- * Strip the documentation preamble from a prompt markdown file.
- * Returns everything after the first standalone `---` line, trimmed.
- * If no `---` is found, returns the whole content trimmed.
- */
-export function extractSystemPrompt(markdown) {
-  if (typeof markdown !== "string") return "";
-  const lines = markdown.split("\n");
-  const sepIdx = lines.findIndex((l) => l.trim() === "---");
-  if (sepIdx === -1) return markdown.trim();
-  return lines.slice(sepIdx + 1).join("\n").trim();
-}
-
-/**
- * Assemble the user-turn prompt from a validated /v1/script request.
- * Mirrors the structure the system prompt expects (Curated facts +
- * peak moments + duration target).
+ * Pure: assemble the user-turn prompt. Mirrors workers/.../claudeClient.js
+ * buildUserPrompt — kept inline rather than imported because workers/
+ * isn't part of the Vite bundle graph.
  */
 export function buildUserPrompt(body, { totalDurationS = 30 } = {}) {
   const lines = [];
@@ -61,34 +62,30 @@ export function buildUserPrompt(body, { totalDurationS = 30 } = {}) {
     lines.push(`"""${body.personalContext.trim().slice(0, 500)}"""`);
     lines.push("");
   }
-  lines.push("Produce the JSON described in the system prompt. Cover [0, " + totalDurationS + "] seconds end-to-end. One scene per peak moment unless adjacent peaks are within 2s of each other (merge those).");
+  lines.push(`Produce the JSON described in the system prompt. Cover [0, ${totalDurationS}] seconds end-to-end. One scene per peak moment unless adjacent peaks are within 2s of each other (merge those).`);
   return lines.join("\n");
 }
 
 /**
- * Parse Claude's response into the /v1/script scenes payload.
- * Tolerates surrounding whitespace and accidental ```json fences.
- * Throws with a clear message on schema failure.
+ * Pure: parse Claude's response. Same logic as the Worker's claudeClient
+ * parseClaudeResponse; kept inline for the same bundle-graph reason.
  */
 export function parseClaudeResponse(rawText, { routeId, tone, language, totalDurationS }) {
   if (typeof rawText !== "string" || rawText.trim().length === 0) {
     throw new Error("Claude returned empty body");
   }
-  // Strip optional ```json fences
   let cleaned = rawText.trim();
   if (cleaned.startsWith("```")) {
     cleaned = cleaned.replace(/^```(?:json)?\s*/, "").replace(/```$/, "").trim();
   }
   let parsed;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch (err) {
+  try { parsed = JSON.parse(cleaned); }
+  catch (err) {
     throw new Error(`Claude returned non-JSON: ${err.message}; head=${cleaned.slice(0, 120)}`);
   }
   if (!parsed || !Array.isArray(parsed.scenes) || parsed.scenes.length === 0) {
     throw new Error("Claude response is missing scenes array");
   }
-  // Light schema clean: coerce numbers, defaults for captionStyle.
   const scenes = parsed.scenes.map((s, i) => {
     const tStart = Number(s.tStart);
     const tEnd = Number(s.tEnd);
@@ -120,21 +117,30 @@ export function parseClaudeResponse(rawText, { routeId, tone, language, totalDur
       totalDurationS,
       wordCount: scenes.reduce((acc, s) => acc + s.narration.split(/\s+/).length, 0),
       generatedAt: new Date().toISOString(),
+      via: "browser-direct",
     },
   };
 }
 
+function withCode(code, message) {
+  const e = new Error(message);
+  e.code = code;
+  return e;
+}
+
+async function safeText(res) { try { return await res.text(); } catch { return ""; } }
+
 /**
- * Call Claude. Production passes the global fetch; tests inject a stub.
- * Returns the parsed /v1/script payload, ready to JSON.stringify.
- *
- * Errors surface with `code` so the Worker can map them onto RFC-7807 slugs:
- *   - "auth"      → 502 upstream-claude (revealed only as upstream failure)
- *   - "timeout"   → 504 upstream-claude
- *   - "rate"      → 503 upstream-claude
- *   - "parse"     → 502 upstream-claude
+ * Call Anthropic from the browser. Caller must supply the user's
+ * BYOK key and a complete prompt body. Throws Error with `code` so
+ * the caller can map to UI states:
+ *   - "auth"    → key invalid (401/403)
+ *   - "rate"    → 429
+ *   - "timeout" → no response within timeoutMs
+ *   - "cors"    → preflight or CORS rejection
+ *   - "parse"   → response shape unexpected
  */
-export async function callClaude({
+export async function callAnthropicDirect({
   apiKey,
   systemPrompt,
   body,
@@ -142,22 +148,24 @@ export async function callClaude({
   fetchImpl = globalThis.fetch,
   model = DEFAULT_MODEL,
   maxTokens = DEFAULT_MAX_TOKENS,
-  timeoutMs = 15000,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
 } = {}) {
-  if (!apiKey) throw withCode("auth", "ANTHROPIC_API_KEY not provisioned");
+  if (!apiKey) throw withCode("auth", "Anthropic BYOK key is not set");
   if (typeof fetchImpl !== "function") throw withCode("parse", "fetch not available");
 
   const userPrompt = buildUserPrompt(body, { totalDurationS });
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+
   let res;
   try {
-    res = await fetchImpl("https://api.anthropic.com/v1/messages", {
+    res = await fetchImpl(ANTHROPIC_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-API-Key": apiKey,
         "anthropic-version": ANTHROPIC_VERSION,
+        "anthropic-dangerous-direct-browser-access": "true",
       },
       body: JSON.stringify({
         model,
@@ -168,20 +176,23 @@ export async function callClaude({
       signal: controller.signal,
     });
   } catch (err) {
-    if (err?.name === "AbortError") throw withCode("timeout", `Claude request exceeded ${timeoutMs}ms`);
-    throw withCode("parse", `fetch failed: ${err?.message || err}`);
+    if (err?.name === "AbortError") throw withCode("timeout", `Anthropic exceeded ${timeoutMs}ms`);
+    // TypeError with "Failed to fetch" is browser-CORS speak.
+    if (err?.message && /CORS|Failed to fetch|NetworkError/i.test(err.message)) {
+      throw withCode("cors", "Browser-direct Anthropic blocked by CORS. Anthropic must allow this origin OR the BYOK key must route through the Worker.");
+    }
+    throw withCode("parse", `Anthropic fetch failed: ${err?.message || err}`);
   } finally {
     clearTimeout(timer);
   }
 
-  if (res.status === 401 || res.status === 403) throw withCode("auth", "Anthropic rejected the key");
+  if (res.status === 401 || res.status === 403) throw withCode("auth", "Anthropic rejected the key (revoked or wrong format)");
   if (res.status === 429) throw withCode("rate", "Anthropic rate-limited the request");
   if (!res.ok) {
     const detail = await safeText(res);
-    throw withCode("parse", `Claude ${res.status}: ${detail.slice(0, 240)}`);
+    throw withCode("parse", `Anthropic ${res.status}: ${detail.slice(0, 240)}`);
   }
   const json = await res.json();
-  // Claude responses: { content: [{ type: "text", text: "..." }] }
   const text = Array.isArray(json?.content)
     ? json.content.filter((c) => c?.type === "text").map((c) => c.text).join("")
     : "";
@@ -191,14 +202,4 @@ export async function callClaude({
     language: body.language,
     totalDurationS,
   });
-}
-
-function withCode(code, message) {
-  const e = new Error(message);
-  e.code = code;
-  return e;
-}
-
-async function safeText(res) {
-  try { return await res.text(); } catch { return ""; }
 }
