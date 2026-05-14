@@ -7,7 +7,8 @@ import { readUserSettings } from "../../services/userSettings.js";
 import { voicesForLanguage } from "../../services/voiceCatalog.js";
 import { BGM_TRACKS, defaultBgmForTone, getBgmTrack } from "../../services/bgmCatalog.js";
 import { TRAVELER_PROFILES, applyTravelerProfile } from "../../services/travelerProfile.js";
-import { loadBgm } from "../../services/bgmMixer.js";
+import { loadBgm, defaultBgmStartOffsetS } from "../../services/bgmMixer.js";
+import TeleprompterRecorder from "./TeleprompterRecorder.jsx";
 import TurnstileWidget from "../turnstile/TurnstileWidget.jsx";
 
 const PERSONAL_NOTE_STORAGE_PREFIX = "yatra.director.personalNote";
@@ -62,6 +63,7 @@ const STEP_DEFINITIONS = [
   { id: "tour",      title: "Pick the places",     help: "Which spots should the film visit, and how to share the time?" },
   { id: "basemap",   title: "Pick a map look",     help: "What kind of map sits under the journey?" },
   { id: "language",  title: "Pick a language",     help: "Which language should the narrator speak?" },
+  { id: "narration", title: "Pick a narration source", help: "AI voice, your voice, or your own TTS service?" },
   { id: "voice",     title: "Pick a voice",        help: "Who narrates the film?" },
   { id: "music",     title: "Pick background music", help: "What plays underneath the narration?" },
   { id: "profile",   title: "Who's walking?",      help: "Optional — a quick traveler profile shapes the narration." },
@@ -78,12 +80,16 @@ const STEP_DEFINITIONS = [
  * has 2+ trail variants).
  * Tour step appears only in tour mode.
  */
-export function buildSteps({ locationHasTours, mode, locationHasMultipleTrails }) {
+export function buildSteps({ locationHasTours, mode, locationHasMultipleTrails, narrationSource }) {
   return STEP_DEFINITIONS.filter((s) => {
     if (s.id === "mode") return locationHasTours;
     if (s.id === "trail") return mode === "point-to-point" && locationHasMultipleTrails;
     if (s.id === "tour")  return mode === "tour";
-    return true; // music, profile, duration, note, review are universal
+    // Voice picker only applies when AI is doing the narration. If
+    // the user picked "Record your own", their voice IS the voice —
+    // skip the Google TTS voice list.
+    if (s.id === "voice") return narrationSource !== "record";
+    return true;
   });
 }
 
@@ -125,7 +131,14 @@ export default function DirectorView({ locations = {}, initialLocationId, atlasC
   const [customRatios, setCustomRatios] = useState({});    // {poiId: 0..1}
   const [totalDurationS, setTotalDurationS] = useState(30);
   const [bgmId, setBgmId] = useState(() => defaultBgmForTone("devotional"));
+  const [bgmFile, setBgmFile] = useState(null);            // user-uploaded local mp3
+  const [bgmStartOffsetS, setBgmStartOffsetS] = useState(0);
   const [profileId, setProfileId] = useState("skip");
+  // Narration source: "ai" (Google TTS via Worker / BYOK) | "record" (mic teleprompter)
+  const [narrationSource, setNarrationSource] = useState("ai");
+  const [recorderOpen, setRecorderOpen] = useState(false);
+  const [recordedScenes, setRecordedScenes] = useState(null); // Float32Array[] | null
+  const [scriptForRecording, setScriptForRecording] = useState(null); // generated script preview
 
   const [stage, setStage] = useState("idle"); // idle | running | done | error
   const [progressMsg, setProgressMsg] = useState("");
@@ -155,8 +168,8 @@ export default function DirectorView({ locations = {}, initialLocationId, atlasC
   const effectiveVoiceId = voiceId || palette.voice?.voiceIdByLang?.[language] || "";
 
   const STEPS = useMemo(
-    () => buildSteps({ locationHasTours, mode, locationHasMultipleTrails }),
-    [locationHasTours, mode, locationHasMultipleTrails],
+    () => buildSteps({ locationHasTours, mode, locationHasMultipleTrails, narrationSource }),
+    [locationHasTours, mode, locationHasMultipleTrails, narrationSource],
   );
 
   // Reset trail when the location changes; pre-select the first trail
@@ -252,14 +265,21 @@ export default function DirectorView({ locations = {}, initialLocationId, atlasC
           createAudioBuffer = (n, len, sr) => new OfflineAudioContext(n, len, sr).createBuffer(n, len, sr);
         }
       } catch { /* not available */ }
-      // Load BGM if a real track is chosen and AudioContext is available.
-      const track = getBgmTrack(bgmId);
-      if (track?.url && typeof AudioContext !== "undefined") {
+      // Load BGM. Priority: user-uploaded file > catalog track URL.
+      if (typeof AudioContext !== "undefined") {
+        const ctx = new AudioContext();
         try {
-          const ctx = new AudioContext();
-          bgmBuffer = await loadBgm({ url: track.url, audioContext: ctx });
-          ctx.close?.();
-        } catch { /* BGM file missing or decode failed — proceed without */ }
+          if (bgmFile) {
+            const ab = await bgmFile.arrayBuffer();
+            bgmBuffer = await ctx.decodeAudioData(ab);
+          } else {
+            const track = getBgmTrack(bgmId);
+            if (track?.url) {
+              bgmBuffer = await loadBgm({ url: track.url, audioContext: ctx });
+            }
+          }
+        } catch { /* BGM unavailable — proceed without */ }
+        ctx.close?.();
       }
 
       const out = await runDirectorPipeline({
@@ -276,6 +296,8 @@ export default function DirectorView({ locations = {}, initialLocationId, atlasC
         totalDurationS,
         voiceOverride: effectiveVoiceId,
         bgmBuffer,
+        bgmStartOffsetS,
+        prerecordedTracks: narrationSource === "record" ? recordedScenes : null,
         turnstileToken,
         signal: abortRef.current.signal,
         makeRenderer: createOffscreenReelRenderer,
@@ -302,6 +324,29 @@ export default function DirectorView({ locations = {}, initialLocationId, atlasC
   }
 
   function onCancelRun() { abortRef.current?.abort(); }
+
+  /** Generate the script preview, then open the teleprompter recorder. */
+  async function openRecorder() {
+    if (!route) return;
+    setRecorderOpen(true);
+    try {
+      const { generateScript } = await import("../../services/directorScript.js");
+      const script = await generateScript({
+        config: route, tone, language,
+        personalContext: applyTravelerProfile(personalNote, profileId),
+        routeVariantId: selectedTrail?.id || null,
+        mode,
+        tourId: mode === "tour" ? selectedTour?.id || null : null,
+        coverageWeights: effectiveCoverage,
+        poiSubset: mode === "tour" ? activePoiIds : null,
+        totalDurationS,
+      });
+      setScriptForRecording(script);
+    } catch (err) {
+      setRecorderOpen(false);
+      setErrorMsg(err?.message || "Could not prepare the script for recording.");
+    }
+  }
 
   const currentStep = STEPS[step];
   const isLast = step === STEPS.length - 1;
@@ -567,24 +612,103 @@ export default function DirectorView({ locations = {}, initialLocationId, atlasC
           </section>
         )}
 
+        {currentStep.id === "narration" && (
+          <section className="director-row" aria-label="Narration source">
+            <div role="radiogroup" style={{ display: "grid", gap: 8 }}>
+              <button type="button" role="radio" aria-checked={narrationSource === "ai"}
+                      onClick={() => { setNarrationSource("ai"); setRecordedScenes(null); }}
+                      style={coverageBtnStyle(narrationSource === "ai", palette)}>
+                <strong>AI voice</strong>
+                <div style={{ opacity: 0.75, fontSize: "0.82rem", marginTop: 4 }}>
+                  Google TTS (via the Worker, or your BYOK key in Settings). Pick the voice in the next step. Silent in dev mode without a Worker.
+                </div>
+              </button>
+              <button type="button" role="radio" aria-checked={narrationSource === "record"}
+                      onClick={() => { setNarrationSource("record"); }}
+                      style={coverageBtnStyle(narrationSource === "record", palette)}>
+                <strong>🎙 Record your own (with teleprompter)</strong>
+                <div style={{ opacity: 0.75, fontSize: "0.82rem", marginTop: 4 }}>
+                  We'll generate a script and show it scene by scene. You record your voice; we mix it into the MP4. No network needed.
+                </div>
+              </button>
+            </div>
+            {narrationSource === "record" && (
+              <div style={{ marginTop: "0.8rem" }}>
+                {!recordedScenes && (
+                  <button type="button" onClick={openRecorder}
+                          style={{ padding: "0.6rem 1rem", borderRadius: 6, border: "none", cursor: "pointer",
+                                   background: "#8a4528", color: "#f4e8d0", fontWeight: 600 }}>
+                    {recorderOpen ? "Generating script…" : "Open recorder →"}
+                  </button>
+                )}
+                {recordedScenes && (
+                  <div style={{ padding: "0.6rem 0.8rem", borderRadius: 6, background: "rgba(80,160,90,0.15)",
+                                border: "1px solid rgba(80,160,90,0.4)", fontSize: "0.85rem" }}>
+                    ✓ Recorded {recordedScenes.length} scene{recordedScenes.length === 1 ? "" : "s"}.
+                    <button type="button" onClick={() => { setRecordedScenes(null); openRecorder(); }}
+                            style={{ marginLeft: 12, padding: "0.2rem 0.6rem", borderRadius: 4,
+                                     background: "transparent", border: "1px solid rgba(255,255,255,0.2)",
+                                     color: "inherit", cursor: "pointer", fontSize: "0.78rem" }}>
+                      Re-record
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+        )}
+
         {currentStep.id === "music" && (
           <section className="director-row" aria-label="Background music">
             <div role="radiogroup" style={{ display: "grid", gap: 8 }}>
               {BGM_TRACKS.map((t) => {
-                const active = t.id === bgmId;
+                const active = !bgmFile && t.id === bgmId;
                 return (
                   <button key={t.id} type="button" role="radio" aria-checked={active}
-                          onClick={() => setBgmId(t.id)}
+                          onClick={() => { setBgmId(t.id); setBgmFile(null); setBgmStartOffsetS(defaultBgmStartOffsetS(t.durationS)); }}
                           style={coverageBtnStyle(active, palette)}>
                     <strong>{t.name}</strong>
                     <div style={{ opacity: 0.75, fontSize: "0.82rem", marginTop: 4 }}>{t.blurb}</div>
                   </button>
                 );
               })}
+              {/* Local upload */}
+              <label style={{ ...coverageBtnStyle(!!bgmFile, palette), display: "block", cursor: "pointer" }}>
+                <strong>📁 Upload your own (mp3 / m4a / wav)</strong>
+                <div style={{ opacity: 0.75, fontSize: "0.82rem", marginTop: 4 }}>
+                  {bgmFile
+                    ? `Loaded: ${bgmFile.name} (${(bgmFile.size / 1024 / 1024).toFixed(1)} MB)`
+                    : "Pick any audio file from this device. Stays local — never uploaded anywhere."}
+                </div>
+                <input type="file" accept="audio/*" style={{ display: "none" }}
+                       onChange={(e) => {
+                         const f = e.target.files?.[0];
+                         if (!f) return;
+                         setBgmFile(f);
+                         setBgmId("custom-upload");
+                         setBgmStartOffsetS(0);
+                       }} />
+              </label>
             </div>
+
+            {/* Start offset slider — for any non-silence track */}
+            {((bgmFile) || (getBgmTrack(bgmId)?.url)) && (
+              <div style={{ marginTop: "0.8rem", display: "grid", gap: 6 }}>
+                <label style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: "0.85rem" }}>
+                  <span>Start the clip at:</span>
+                  <span style={{ opacity: 0.7 }}>{bgmStartOffsetS.toFixed(1)}s in</span>
+                </label>
+                <input type="range" min="0" max="60" step="0.5" value={bgmStartOffsetS}
+                       onChange={(e) => setBgmStartOffsetS(Number(e.target.value))} />
+                <div style={{ opacity: 0.55, fontSize: "0.78rem" }}>
+                  AI defaults to 5s in (skips most intros). Drag to override.
+                </div>
+              </div>
+            )}
+
             <p style={{ margin: "0.6rem 0 0", fontSize: "0.78rem", opacity: 0.6 }}>
-              Music ducks under the narration automatically (-12 dB). All tracks are CC0.
-              If the chosen track isn't installed yet, the film renders narrator-only.
+              Music ducks under the narration automatically (-12 dB).
+              Catalog tracks are CC0. If a catalog track isn't installed yet, the film renders narrator-only — upload your own to be safe.
             </p>
           </section>
         )}
@@ -930,6 +1054,26 @@ export default function DirectorView({ locations = {}, initialLocationId, atlasC
             </ol>
           </details>
         </section>
+      )}
+
+      {recorderOpen && scriptForRecording && (
+        <div role="dialog" aria-modal="true"
+             style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.78)",
+                      display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: "1rem" }}>
+          <div style={{ background: "#1a1d24", borderRadius: 10, maxWidth: 640, width: "100%",
+                        maxHeight: "92vh", overflowY: "auto", padding: "1rem 1.2rem" }}>
+            <TeleprompterRecorder
+              scenes={scriptForRecording.scenes}
+              sampleRate={48000}
+              onComplete={(tracks) => {
+                setRecordedScenes(tracks);
+                setRecorderOpen(false);
+                setScriptForRecording(null);
+              }}
+              onCancel={() => { setRecorderOpen(false); setScriptForRecording(null); }}
+            />
+          </div>
+        </div>
       )}
     </div>
   );

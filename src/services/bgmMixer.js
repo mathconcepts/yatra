@@ -67,10 +67,12 @@ function lerp(a, b, t) {
  * Pure: get one sample from a BGM buffer at sample index `i`, looping
  * with a crossfade at the loop boundary so the seam isn't audible.
  */
-export function getBgmSample(bgmChannel, i, sampleRate) {
+export function getBgmSample(bgmChannel, i, sampleRate, startOffsetSamples = 0) {
   const len = bgmChannel.length;
   if (len === 0) return 0;
-  const j = i % len;
+  // Apply start offset (the AI / user-picked clip start) so the loop
+  // begins at a meaningful musical moment instead of t=0 silence/intro.
+  const j = (i + (startOffsetSamples % len) + len) % len;
   // Crossfade region: last LOOP_CROSSFADE_S of the loop blends with
   // the first LOOP_CROSSFADE_S of the next loop. Only meaningful when
   // the BGM track is long enough to contain a real crossfade region;
@@ -97,6 +99,7 @@ export function mixWithBgm({
   bgmBuffer,
   narrationWindows,
   createBuffer,
+  bgmStartOffsetS = 0,
 }) {
   if (!narrationBuffer) throw new Error("mixWithBgm: narrationBuffer required");
   if (typeof createBuffer !== "function") throw new Error("mixWithBgm: createBuffer required");
@@ -109,6 +112,7 @@ export function mixWithBgm({
   const sampleRate = narrationBuffer.sampleRate;
   const out = createBuffer(channels, length, sampleRate);
   const windows = narrationWindows || [];
+  const startOffsetSamples = Math.floor(Math.max(0, bgmStartOffsetS) * sampleRate);
   for (let ch = 0; ch < channels; ch++) {
     const inN = narrationBuffer.getChannelData(ch);
     const inBg = bgmBuffer.getChannelData(Math.min(ch, bgmBuffer.numberOfChannels - 1));
@@ -116,10 +120,22 @@ export function mixWithBgm({
     for (let i = 0; i < length; i++) {
       const t = i / sampleRate;
       const gain = bgmGainAtTime(t, windows);
-      outArr[i] = inN[i] + getBgmSample(inBg, i, sampleRate) * gain * 0.35; // headroom
+      outArr[i] = inN[i] + getBgmSample(inBg, i, sampleRate, startOffsetSamples) * gain * 0.35; // headroom
     }
   }
   return out;
+}
+
+/**
+ * Pure: pick a sensible default start offset for a BGM track.
+ *
+ * Heuristic: skip the first 5 seconds (most CC0 tracks have a quiet
+ * intro/silence) but never start past 25% of the track length.
+ * If the track is short, start at 0.
+ */
+export function defaultBgmStartOffsetS(trackDurationS) {
+  if (!Number.isFinite(trackDurationS) || trackDurationS <= 10) return 0;
+  return Math.min(5, trackDurationS * 0.25);
 }
 
 /**

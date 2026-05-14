@@ -195,12 +195,28 @@ export async function synthesizeScenes({
   userTtsKey,        // BYOK Google TTS key (forwarded to /v1/tts via header)
   turnstileToken,    // Turnstile token from widget (omitted in dev / BYOK)
   voiceOverride,     // user-picked voice from Director Voice step
+  prerecordedTracks, // Float32Array[] (one per scene) supplied by mic-recording flow
 } = {}) {
   if (!Array.isArray(scenes) || scenes.length === 0) {
     throw new Error("synthesizeScenes: scenes array required");
   }
   if (!palette) throw new Error("synthesizeScenes: palette required");
   if (!language) throw new Error("synthesizeScenes: language required");
+
+  // Prerecorded tracks (mic-recording teleprompter) bypass mode resolution
+  // entirely. The user already supplied audio per scene; we just need to
+  // pad/truncate each one to match the scene duration.
+  if (Array.isArray(prerecordedTracks) && prerecordedTracks.length > 0) {
+    const padded = scenes.map((s, i) => {
+      const target = Math.max(0, Math.floor((s.tEnd - s.tStart) * sampleRate));
+      const src = prerecordedTracks[i] || new Float32Array(0);
+      if (src.length === target) return src;
+      const out = new Float32Array(target);
+      out.set(src.subarray(0, Math.min(src.length, target)));
+      return out;
+    });
+    return { tracks: padded, mode: "recorded" };
+  }
 
   const resolved = resolveMode(mode);
   const out = [];
