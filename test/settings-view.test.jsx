@@ -10,9 +10,11 @@ beforeEach(() => {
 });
 
 describe("SettingsView", () => {
-  it("renders the three field labels", () => {
+  it("renders all field labels (OpenRouter + Anthropic + TTS + Worker URL)", () => {
     render(<SettingsView onCancel={() => {}} />);
-    expect(screen.getByText("Anthropic API key")).toBeInTheDocument();
+    expect(screen.getByText("OpenRouter API key")).toBeInTheDocument();
+    expect(screen.getByText("OpenRouter model (optional)")).toBeInTheDocument();
+    expect(screen.getByText("Anthropic API key (direct)")).toBeInTheDocument();
     expect(screen.getByText("Google Cloud TTS API key")).toBeInTheDocument();
     expect(screen.getByText("Custom Worker URL")).toBeInTheDocument();
   });

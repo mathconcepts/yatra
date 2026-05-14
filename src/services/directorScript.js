@@ -15,6 +15,7 @@
 import { detectPeakMoments, selectRouteVariant } from "./peakMoments.js";
 import { readUserSettings } from "./userSettings.js";
 import { callAnthropicDirect } from "./anthropicDirectClient.js";
+import { callOpenRouterDirect } from "./openRouterDirectClient.js";
 import { getSystemPrompt, extractSystemPrompt } from "./directorPrompts.js";
 import { buildTourScriptRequest } from "./tourScript.js";
 
@@ -140,9 +141,22 @@ export async function generateScript({
     ? buildTourScriptRequest({ config, tourId, tone, language, personalContext, coverageWeights, poiSubset, totalDurationS })
     : buildScriptRequest({ config, tone, language, personalContext, routeVariantId });
 
-  // BYOK Anthropic: browser-direct to api.anthropic.com, bypassing our
-  // Worker entirely. Trust model: user's long-lived bearer never touches
-  // our infrastructure. See SECURITY.md "BYOK trust model".
+  // BYOK dispatch order (highest specificity → lowest):
+  //   1. OpenRouter — explicit choice of model. User picked a specific
+  //      provider/model slug; honor it.
+  //   2. Anthropic direct — single-provider BYOK.
+  //   3. Worker / mock — fallback paths below.
+  // All three end with the same {scenes, meta} shape.
+  if (settings.openRouterKey && !isMockMode()) {
+    const systemPrompt = getSystemPrompt(tone);
+    return callOpenRouterDirect({
+      apiKey: settings.openRouterKey,
+      model: settings.openRouterModel || undefined,
+      systemPrompt,
+      body,
+      signal,
+    });
+  }
   if (settings.anthropicKey && !isMockMode()) {
     const systemPrompt = getSystemPrompt(tone);
     return callAnthropicDirect({

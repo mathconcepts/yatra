@@ -34,6 +34,8 @@ describe("readUserSettings", () => {
       anthropicKey: "sk-ant-x",
       googleTtsKey: "AIza-x",
       workerUrl: "https://w/",
+      openRouterKey: "sk-or-x",
+      openRouterModel: "openai/gpt-4o-mini",
       unknownField: 42,
       anthropicKey2: "leak",
     }));
@@ -42,6 +44,8 @@ describe("readUserSettings", () => {
       anthropicKey: "sk-ant-x",
       googleTtsKey: "AIza-x",
       workerUrl: "https://w/",
+      openRouterKey: "sk-or-x",
+      openRouterModel: "openai/gpt-4o-mini",
     });
   });
 
