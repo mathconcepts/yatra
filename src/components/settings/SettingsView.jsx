@@ -32,8 +32,8 @@ const FIELD_DEFS = [
   {
     key: "openRouterModel",
     label: "OpenRouter model (optional)",
-    placeholder: "anthropic/claude-3.5-sonnet",
-    help: "Which model OpenRouter should route to. Pick from the suggestions below or paste any provider/model slug from openrouter.ai/models. Leave blank for the default (Claude 3.5 Sonnet).",
+    placeholder: "meta-llama/llama-3.3-70b-instruct:free",
+    help: "Which model OpenRouter should route to. Pick from the suggestions below or paste any provider/model slug from openrouter.ai/models. Leave blank for the default (Llama 3.3 70B, free).",
     isPlain: true, // not a secret — don't mask
     suggestions: "openrouter-models",
   },
@@ -85,7 +85,10 @@ export default function SettingsView({ onCancel }) {
     }
     setTestState((t) => ({ ...t, [key]: { status: "testing", message: "Validating…" } }));
     try {
-      const message = await testKey(key, val);
+      // Pass the pending state into testKey so the OpenRouter probe uses
+      // the model the user just picked from the chips, not whatever
+      // they had saved earlier.
+      const message = await testKey(key, val, pending);
       setTestState((t) => ({ ...t, [key]: { status: "ok", message } }));
     } catch (err) {
       setTestState((t) => ({ ...t, [key]: { status: "error", message: mapValidationError(err) } }));
@@ -308,12 +311,15 @@ function btnStyle({ primary = false, danger = false } = {}) {
  * Test a single field against its provider. Returns success message on
  * 2xx; throws Error with `code` matching mapValidationError() on failure.
  */
-async function testKey(key, value) {
+async function testKey(key, value, pending = {}) {
   if (key === "openRouterKey") {
-    const settings = readUserSettings();
+    // Prefer the pending model (user might have just picked a chip and
+    // not yet saved). Fall back to the saved model, then the default.
+    const saved = readUserSettings();
+    const model = pending.openRouterModel || saved.openRouterModel || undefined;
     await callOpenRouterDirect({
       apiKey: value,
-      model: settings.openRouterModel || undefined,
+      model,
       systemPrompt: getSystemPrompt("devotional"),
       body: {
         routeId: "_validate", routeTitle: "_validate",
@@ -323,7 +329,7 @@ async function testKey(key, value) {
       maxTokens: 8,
       timeoutMs: 15000,
     });
-    return "OpenRouter key works.";
+    return `OpenRouter key works${model ? ` (model: ${model})` : ""}.`;
   }
   if (key === "anthropicKey") {
     await callAnthropicDirect({
@@ -375,6 +381,7 @@ function mapValidationError(err) {
   if (code === "auth") return "Key rejected by provider — revoked, wrong format, or restricted.";
   if (code === "rate") return "Provider rate-limited the test. Try again in a moment.";
   if (code === "credits") return "OpenRouter says you're out of credits. Top up at openrouter.ai or pick a :free model.";
+  if (code === "model-not-found") return err?.message || "That model isn't available on OpenRouter. Pick a different chip.";
   if (code === "timeout") return "No response in 10 seconds. Check your network.";
   if (code === "cors") return "Provider blocked the browser request. Your network or provider config may not allow direct browser access.";
   if (code === "parse") return `Provider returned an unexpected response. ${err.message || ""}`;
