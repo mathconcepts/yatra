@@ -1,0 +1,91 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Yatra Living Atlas — wireframe</title>
+<style>
+/* Intentionally rough wireframe. System fonts, gray lines, no color.
+   Three nested levels: WORLD (globe) -> REGION (India, every journey, live clock) -> JOURNEY (existing Atlas). */
+body{margin:0;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#fff;color:#222}
+.frame{width:1280px;height:800px;position:relative;border:2px solid #999;box-sizing:border-box;overflow:hidden;margin:0}
+.panel{position:absolute;border:1.5px dashed #888;background:rgba(255,255,255,.92);padding:10px 12px;box-sizing:border-box;font-size:13px}
+.title{font-weight:700;font-size:18px;margin:0 0 4px}
+.muted{color:#777;font-size:11px;letter-spacing:.08em;text-transform:uppercase}
+.map{position:absolute;inset:0;background:repeating-linear-gradient(45deg,#f4f4f4 0 14px,#ececec 14px 28px)}
+.india{position:absolute;left:470px;top:70px;width:560px;height:660px}
+.route{position:absolute;height:0;border-top:2px solid #333}
+.dot{position:absolute;width:14px;height:14px;border:2px solid #333;border-radius:50%;background:#fff}
+.dot.moving{background:#333}
+.ring{position:absolute;width:34px;height:34px;border:1px solid #333;border-radius:50%;opacity:.5}
+.label{position:absolute;font-size:11px;background:#fff;border:1px solid #aaa;padding:1px 4px;white-space:nowrap}
+.btn{display:inline-block;border:1.5px solid #555;padding:3px 8px;margin:2px 2px 2px 0;font-size:12px;border-radius:3px}
+.btn.on{background:#333;color:#fff}
+.scrub{height:34px;border:1px solid #aaa;margin:6px 0;position:relative;background:linear-gradient(to top,#ddd 0 30%,transparent 30%)}
+.scrub .now{position:absolute;left:62%;top:-4px;bottom:-4px;border-left:2px solid #000}
+.row{border-bottom:1px solid #ddd;padding:5px 0}
+.row b{font-size:13px}
+.bar{height:3px;background:#333;margin-top:4px}
+.note{position:absolute;font-size:10px;color:#666;border:1px dotted #999;padding:2px 5px;background:#fff}
+.crumb{position:absolute;left:470px;top:16px;font-size:12px}
+.crumb span{border:1px solid #888;padding:2px 8px;margin-right:4px}
+.crumb span.on{background:#333;color:#fff}
+.globe{position:absolute;right:28px;top:120px;width:150px;height:150px;border:2px solid #555;border-radius:50%;text-align:center;font-size:11px;line-height:150px;color:#555}
+</style></head><body>
+<div class="frame">
+  <div class="map"></div>
+  <!-- Level switch: the same MapLibre map, three zoom bands. Camera flies continuously between them. -->
+  <div class="crumb"><span>WORLD · globe</span><span class="on">REGION · India</span><span>JOURNEY · 3D terrain</span></div>
+  <div class="note" style="left:470px;top:44px">Basemap at this level: Sentinel-2 cloudless (10 m, CC-BY, key-free). Journey level keeps Esri imagery + terrain.</div>
+
+  <!-- India outline stand-in with all registered journeys drawn as real-geometry lines -->
+  <div class="india">
+    <!-- Konkan rail: Mumbai -> Mangaluru, long diagonal -->
+    <div class="route" style="left:120px;top:150px;width:300px;transform:rotate(68deg);transform-origin:left"></div>
+    <div class="dot" style="left:113px;top:143px"></div><div class="label" style="left:60px;top:128px">Mumbai CST</div>
+    <div class="dot moving" style="left:205px;top:370px"></div><div class="ring" style="left:195px;top:360px"></div>
+    <div class="label" style="left:222px;top:362px">10111 Konkan Kanya · past Ratnagiri · 61%</div>
+    <div class="dot" style="left:225px;top:420px"></div><div class="label" style="left:236px;top:428px">Mangaluru</div>
+    <!-- Tirupati, Yadagiri, Srirangam: short routes, shown as pulses with count badges -->
+    <div class="dot moving" style="left:330px;top:400px"></div><div class="ring" style="left:320px;top:390px"></div>
+    <div class="label" style="left:350px;top:392px">Tirumala steps · 7 pilgrims walking (sample)</div>
+    <div class="dot" style="left:300px;top:300px"></div><div class="label" style="left:316px;top:294px">Yadagiri · next darshan 18:00</div>
+    <div class="dot moving" style="left:330px;top:520px"></div><div class="ring" style="left:320px;top:510px"></div>
+    <div class="label" style="left:350px;top:514px">Srirangam → Trichy · tour in progress</div>
+    <div class="note" style="left:140px;top:560px;width:250px">Only moving things pulse. Still things are plain dots. Click any dot = camera dives to JOURNEY level (existing Atlas).</div>
+  </div>
+
+  <!-- Left column: title, live clock, scrubber, list — same grammar as the reference site -->
+  <div class="panel" style="left:16px;top:16px;width:300px;height:150px">
+    <div class="muted">Living Atlas</div>
+    <p class="title">Where The Journeys Are</p>
+    <div style="font-size:12px">4 journeys · 1 rail service · 3 pilgrim paths · every line follows real track or trail</div>
+    <div class="note" style="left:8px;top:112px;position:absolute">Counts come from LocationConfig registry. Nothing hand-typed.</div>
+  </div>
+  <div class="panel" style="left:16px;top:176px;width:300px;height:230px">
+    <div style="font-size:30px;font-weight:700;line-height:1">20:32<span style="font-size:14px;color:#888">:16</span></div>
+    <div class="muted">IST · Friday · <b style="color:#222">3 moving now</b> · scheduled, not tracked</div>
+    <div style="margin-top:10px" class="muted">Move the clock</div>
+    <div><span class="btn">Mon</span><span class="btn">Tue</span><span class="btn">Wed</span><span class="btn">Thu</span><span class="btn on">Fri</span><span class="btn">Sat</span><span class="btn">Sun</span></div>
+    <div class="scrub"><div class="now"></div></div>
+    <div><span class="btn on">▶ Play the day</span><span class="btn">1m</span><span class="btn on">5m</span><span class="btn">20m</span><span class="btn">● Live</span></div>
+  </div>
+  <div class="panel" style="left:16px;top:416px;width:300px;height:120px">
+    <div class="muted">Season (NASA GIBS daily imagery)</div>
+    <div class="scrub" style="background:none"><div class="now" style="left:40%"></div></div>
+    <div style="font-size:11px">Jan ─── Mar ─── <b>Jun · monsoon arrives</b> ─── Sep ─── Dec</div>
+    <div class="note" style="position:static;margin-top:6px">Swaps the REGION basemap by date. Off by default on mobile.</div>
+  </div>
+  <div class="panel" style="left:16px;top:546px;width:300px;height:238px">
+    <div class="muted">Moving now · 3</div>
+    <div><span class="btn on">Moving</span><span class="btn">Today</span><span class="btn">All 4</span><span class="btn">Rail</span><span class="btn">Foot</span></div>
+    <div class="row"><b>10111 Mumbai CST → Mangaluru</b><div style="font-size:11px;color:#666">07:05 → 21:35 · past Ratnagiri · 61%</div><div class="bar" style="width:61%"></div></div>
+    <div class="row"><b>Alipiri → Tirumala (footpath)</b><div style="font-size:11px;color:#666">walk window 04:00–22:00 · 7 on the steps · 43%</div><div class="bar" style="width:43%"></div></div>
+    <div class="row"><b>Srirangam → Trichy tour</b><div style="font-size:11px;color:#666">18:00 → 21:00 · at Jambukeshwarar · 80%</div><div class="bar" style="width:80%"></div></div>
+  </div>
+
+  <!-- Right: globe pip (WORLD level) and sources -->
+  <div class="globe">globe pip<br>(click: zoom out to WORLD)</div>
+  <div class="panel" style="right:16px;bottom:16px;width:300px;height:90px;font-size:11px">
+    <div class="muted">Sources &amp; method</div>
+    Imagery: Sentinel-2 cloudless © EOX (CC-BY 4.0) · Esri World Imagery (journey level) · Terrain: Mapzen/AWS · Timetables: per-journey source link. Positions are scheduled, not tracked.
+  </div>
+  <div class="panel" style="right:16px;top:60px;width:150px;height:44px;text-align:center"><span class="btn">+</span><span class="btn">−</span><span class="btn">⤢</span></div>
+</div>
+</body></html>
