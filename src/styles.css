@@ -1804,3 +1804,36 @@ body {
   padding: 6px 0;
 }
 .director-scenes-toggle ol { list-style: none; padding: 0; margin: 12px 0 0; }
+
+/* ─────────────────────────────────────────────────────────────────
+   Living Atlas (slice 1) — one map, every journey, a clock
+   ──────────────────────────────────────────────────────────────── */
+.la-root { position: fixed; inset: 0; display: flex; flex-wrap: wrap; gap: 12px; padding: 12px; box-sizing: border-box; overflow: auto;
+  font-family: 'Manrope', system-ui, sans-serif; color: #ede4d3;
+  background: radial-gradient(ellipse at 30% 0%, #1a2a3d 0%, #0d1a26 55%, #07111a 100%); }
+.la-side { flex: 1 1 320px; max-width: 400px; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.la-panel { background: rgba(13,26,38,.88); border: 1px solid #22364a; border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; }
+.la-kicker { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: #9aa8b5; }
+.la-title { margin: 0; font-family: 'Cormorant Garamond', Georgia, serif; font-weight: 600; font-size: 2.3rem; line-height: 1; color: #f5ebd6; letter-spacing: -.01em; }
+.la-muted { font-size: 13px; line-height: 1.5; color: #9aa8b5; }
+.la-clock { font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 500; font-size: 2.6rem; line-height: 1; color: #f5ebd6; }
+.la-clock small { font-size: 1.1rem; color: #9aa8b5; }
+.la-accent { color: #ff9d3a; font-weight: 700; }
+.la-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.la-chip { min-height: 44px; padding: 0 14px; border-radius: 8px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; color: #ede4d3; background: transparent; border: 1px solid #22364a; }
+.la-chip[aria-pressed="true"] { background: #ff9d3a; border-color: #ff9d3a; color: #1a1208; }
+.la-scrub { width: 100%; accent-color: #ff9d3a; height: 28px; margin: 4px 0; }
+.la-list { display: flex; flex-direction: column; gap: 8px; }
+.la-item { text-align: left; cursor: pointer; font: inherit; color: inherit; width: 100%; box-sizing: border-box; min-height: 44px; padding: 12px; border-radius: 8px; background: transparent; border: 1px solid #22364a; }
+.la-item[aria-pressed="true"] { border-color: #ff9d3a; background: rgba(255,157,58,.08); }
+.la-item-top { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; font-weight: 700; color: #f5ebd6; }
+.la-item-pct { font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 400; color: #ff9d3a; }
+.la-item-sub { display: block; font-size: 12px; color: #9aa8b5; margin-top: 2px; }
+.la-bar { display: block; height: 3px; background: #22364a; border-radius: 2px; margin-top: 8px; }
+.la-bar > span { display: block; height: 3px; border-radius: 2px; background: #ff9d3a; }
+.la-mapcol { flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 12px; min-height: 480px; }
+.la-map { flex: 1 1 auto; min-height: 420px; border: 1px solid #22364a; border-radius: 12px; overflow: hidden; background: #07111a; }
+.la-link { color: #ff9d3a; }
+.la-link:hover { color: #ffc27d; }
+.la-root button:focus-visible, .la-root input:focus-visible, .la-root a:focus-visible { outline: 2px solid #f5ebd6; outline-offset: 2px; }
+.la-back { position: fixed; bottom: 12px; left: 12px; z-index: 12; }

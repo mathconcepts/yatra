@@ -160,6 +160,30 @@ Independent cold read by a fresh Claude subagent that saw only a structured summ
 
 Wireframe of the Region level (rough, intentionally unstyled): `docs/designs/yatra-living-atlas-wireframe.html` in the repo (self-contained, open it in a browser; a screenshot was also sent to you in the session). Its Season panel caption says "NASA GIBS daily imagery"; that caption predates the composite decision above and the panel should read "NASA GIBS seasonal composite" when built. It shows the three-band crumb (World · Region · Journey), the left column in the reference's grammar (title and counts from the registry, IST clock, Move the clock, Play the day, Season scrubber, Moving now), real-geometry route lines with pulsing dots only for moving things, a globe pip to zoom out, and the Sources & Method panel.
 
+## Place-agnostic model (revision 3)
+
+The Living Atlas is not an India feature. Nothing in the surface names a country: a **place** is a region config, and the screen is a pure function of it. The interface prototype (`docs/designs/yatra-living-atlas-interface.dc.html`, a Design canvas source) renders three sample places from one registry: South-west India, the Swiss Alps and Galicia's Camino.
+
+Schema additions, all on a new optional **region** record, not on routes or landmarks (the three route fields `schedule`, `geometry` and `services[]` stay exactly as decided):
+
+```js
+region: {
+  id, label, name,
+  bounds: [west, south, east, north],   // the Region camera fits these; no hard-coded centre or zoom
+  tz: "Asia/Kolkata",                    // IANA zone; the clock, day tabs and "moving now" are local to the place
+  season: { peak: 7.5,                   // month (0-11) of fullest green; drives the Season tint and its caption
+            peakNote, dryNote, wetMonths: [5, 8], dryMonths: [2, 4] },
+  journeys: [locationId, ...]            // membership; counts in the header are derived, never typed
+}
+```
+
+Rules this implies:
+- **Engine is geometry-agnostic.** `moversAt` interpolates by distance along any path between halts (service) or runs evenly spaced departures (window); nothing assumes rail, pilgrims or India. A boat, a bus or a procession is a new config, not new code.
+- **Projection is derived** from `bounds` (equal-scale, latitude-corrected); the Region basemap is whichever global imagery layer covers the bounds.
+- **Copy is derived.** Header counts, clock label, season caption, empty states and Sources text read from the region and the journey; no place names appear in components.
+- **Switching place** resets the clock to that place's local time and re-fits the camera; the URL gains `place=<id>` beside `t`, `speed` and `mode`.
+- Sample timetables and walk windows in the prototype are placeholders until a sourced `schedule.source` is typed in.
+
 ## Open Questions
 
 1. **Answered.** Approach B via slices with A first; the owner approved it on 2026-10-09.

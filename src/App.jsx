@@ -3,11 +3,15 @@ import JourneyMap from "./components/JourneyMap";
 import SurfaceRouter from "./components/SurfaceRouter";
 import { LOCATIONS } from "./config";
 import { buildCustomJourney } from "./services/customJourney.js";
+import { backToLivingLink } from "./services/livingClock.js";
 
 const LOCATION_STORAGE_KEY = "yatra.locationId";
 
 function readStoredLocationId() {
   if (typeof window === "undefined") return null;
+  // A Living Atlas dot click lands here with ?location=<id>.
+  const fromUrl = new URLSearchParams(window.location.search).get("location");
+  if (fromUrl && LOCATIONS[fromUrl]) return fromUrl;
   try {
     const stored = window.localStorage.getItem(LOCATION_STORAGE_KEY);
     if (stored && LOCATIONS[stored]) return stored;
@@ -147,8 +151,14 @@ export default function App() {
     return <LocationPicker onPick={pick} onCustom={acceptCustom} />;
   }
 
+  const backLink = typeof window === "undefined" ? null : backToLivingLink(window.location.search);
   const atlas = (
     <div className="jm-root">
+      {backLink && (
+        <a className="jm-surface-toggle la-back" href={backLink} style={{ textDecoration: "none" }}>
+          ← Back to the Living Atlas
+        </a>
+      )}
       {Object.keys(allLocations).length > 1 && (
         <div className="jm-location-switcher">
           <span className="jm-switcher-label">Location</span>

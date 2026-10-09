@@ -2,6 +2,11 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { pickSurface } from "../src/components/SurfaceRouter";
 
 describe("pickSurface", () => {
+  it("accepts living-atlas as a URL override", () => {
+    expect(pickSurface(1280, 800, "living-atlas", null)).toBe("living-atlas");
+    expect(pickSurface(390, 844, "living-atlas", null)).toBe("living-atlas");
+  });
+
   it("returns atlas for landscape desktop (1280x800)", () => {
     expect(pickSurface(1280, 800, null, null)).toBe("atlas");
   });

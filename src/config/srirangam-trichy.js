@@ -21,6 +21,11 @@ const config = {
       color: "#8a4528",
       difficulty: "Easy",
       stats: { distanceKm: 9.5, durationHr: 2.5 },
+      schedule: {
+        kind: "window", tz: "Asia/Kolkata",
+        open: "06:00", close: "20:00", paceKmh: 4, departuresPerDay: 3,
+        source: { name: "PLACEHOLDER — replace with a sourced listing (see docs/designs/yatra-living-atlas.md, Open Question 3)", url: null },
+      },
       waypoints: [
         { lat: 10.8624, lon: 78.6878, elev: 78 },  // Ranganathaswamy Temple
         { lat: 10.8580, lon: 78.6905, elev: 77 },  // Amma Mandapam, river ghat

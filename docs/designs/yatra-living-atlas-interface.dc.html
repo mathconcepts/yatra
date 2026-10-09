@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Living Atlas Region</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600&family=JetBrains+Mono:wght@400;500&family=Manrope:wght@400;500;700&display=swap">
+<style>
+body{margin:0;background:#07111a}
+button{font-family:inherit}
+@keyframes yatra-pulse{0%{transform:scale(.5);opacity:.8}100%{transform:scale(1.9);opacity:0}}
+.halo{position:absolute;left:50%;top:50%;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;border:1px solid #ff9d3a;opacity:0;pointer-events:none}
+.halo.pulse{animation:yatra-pulse 2.2s ease-out infinite}
+@media (prefers-reduced-motion:reduce){.halo.pulse{animation:none;opacity:.5}}
+button:focus-visible,input:focus-visible{outline:2px solid #f5ebd6;outline-offset:2px}
+a{color:#ff9d3a}a:hover{color:#ffc27d}
+</style>
+</helmet>
+<div style="min-height: 1000px; box-sizing: border-box; display: flex; flex-wrap: wrap; gap: 16px; padding: 16px; font-family: 'Manrope', system-ui, sans-serif; color: #ede4d3; background: radial-gradient(ellipse at 30% 0%, #1a2a3d 0%, #0d1a26 55%, #07111a 100%)">
+
+  <!-- LEFT COLUMN -->
+  <div style="flex: 1 1 340px; max-width: 400px; display: flex; flex-direction: column; gap: 12px; min-width: 0">
+
+    <section style="background: rgba(13,26,38,.88); border: 1px solid #22364a; border-radius: 12px; padding: 18px 20px">
+      <div style="font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: #9aa8b5">Yatra · Living Atlas</div>
+      <h1 style="margin: 6px 0 6px; font-family: 'Cormorant Garamond', Georgia, serif; font-weight: 600; font-size: 40px; line-height: 1; color: #f5ebd6; letter-spacing: -.01em">Where The Journeys Are</h1>
+      <div style="font-size: 13px; line-height: 1.5; color: #9aa8b5">{{placeSummary}}</div>
+      <div style="font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: #9aa8b5; margin-top: 12px">Place</div>
+      <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px">
+        <sc-for list="{{places}}" as="p" hint-placeholder-count="3">
+          <button type="button" onClick="{{p.pick}}" aria-pressed="{{p.on}}" style="{{p.style}}">{{p.label}}</button>
+        </sc-for>
+      </div>
+    </section>
+
+    <section style="background: rgba(13,26,38,.88); border: 1px solid #22364a; border-radius: 12px; padding: 18px 20px; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; align-items: baseline; gap: 8px">
+        <div style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 500; font-size: 44px; line-height: 1; color: #f5ebd6">{{clockHM}}<span style="font-size: 18px; color: #9aa8b5">:{{clockS}}</span></div>
+        <div style="font-size: 12px; letter-spacing: .1em; color: #9aa8b5">{{tzLabel}}</div>
+      </div>
+      <div style="font-size: 12px; color: #9aa8b5"><span style="color: {{accent}}; font-weight: 700">{{movingCount}} moving now</span> · {{dayName}} · scheduled, not tracked</div>
+
+      <div style="font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: #9aa8b5; margin-top: 4px">Move the clock</div>
+      <div style="display: flex; flex-wrap: wrap; gap: 6px">
+        <sc-for list="{{days}}" as="d" hint-placeholder-count="7">
+          <button type="button" onClick="{{d.pick}}" aria-pressed="{{d.on}}" style="{{d.style}}">{{d.label}}</button>
+        </sc-for>
+      </div>
+      <input type="range" min="0" max="1439" step="1" value="{{tInt}}" onChange="{{onScrub}}" aria-label="Move the clock" style="width: 100%; margin: 6px 0; accent-color: #ff9d3a; height: 28px">
+      <div style="display: flex; flex-wrap: wrap; gap: 6px">
+        <button type="button" onClick="{{togglePlay}}" style="{{playStyle}}">{{playLabel}}</button>
+        <sc-for list="{{speeds}}" as="s" hint-placeholder-count="3">
+          <button type="button" onClick="{{s.pick}}" aria-pressed="{{s.on}}" style="{{s.style}}">{{s.label}}</button>
+        </sc-for>
+        <button type="button" onClick="{{goLive}}" aria-pressed="{{live}}" style="{{liveStyle}}">● Live</button>
+      </div>
+    </section>
+
+    <section style="background: rgba(13,26,38,.88); border: 1px solid #22364a; border-radius: 12px; padding: 18px 20px; display: flex; flex-direction: column; gap: 10px">
+      <div style="font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: #9aa8b5">Earth layer · {{layerCaption}}</div>
+      <div style="display: flex; flex-wrap: wrap; gap: 6px">
+        <sc-for list="{{modes}}" as="m" hint-placeholder-count="3">
+          <button type="button" onClick="{{m.pick}}" aria-pressed="{{m.on}}" style="{{m.style}}">{{m.label}}</button>
+        </sc-for>
+      </div>
+      <sc-if value="{{isSeason}}" hint-placeholder-val="{{ true }}">
+        <input type="range" min="0" max="23" step="1" value="{{seasonIdx}}" onChange="{{onSeason}}" aria-label="Move the calendar" style="width: 100%; accent-color: #ff9d3a; height: 28px">
+        <div style="display: flex; justify-content: space-between; font-size: 11px; color: #9aa8b5; font-family: 'JetBrains Mono', ui-monospace, monospace"><span>Jan</span><span>Mar</span><span>Jun</span><span>Sep</span><span>Dec</span></div>
+        <div style="font-size: 13px; color: #f5ebd6"><b>{{seasonLabel}}</b> <span style="color: #9aa8b5">{{seasonNote}}</span></div>
+      </sc-if>
+      <sc-if value="{{notSeason}}" hint-placeholder-val="{{ false }}">
+        <div style="font-size: 13px; line-height: 1.5; color: #9aa8b5">{{modeNote}}</div>
+      </sc-if>
+    </section>
+
+    <section style="background: rgba(13,26,38,.88); border: 1px solid #22364a; border-radius: 12px; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px">
+      <div style="display: flex; justify-content: space-between; align-items: baseline">
+        <div style="font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: #9aa8b5">Moving now · {{movingCount}}</div>
+        <div style="display: flex; gap: 6px">
+          <button type="button" onClick="{{showMoving}}" aria-pressed="{{filterMoving}}" style="{{fMovingStyle}}">Moving</button>
+          <button type="button" onClick="{{showAll}}" aria-pressed="{{filterAll}}" style="{{fAllStyle}}">All {{totalCount}}</button>
+        </div>
+      </div>
+      <sc-for list="{{rows}}" as="r" hint-placeholder-count="3">
+        <button type="button" onClick="{{r.pick}}" aria-pressed="{{r.on}}" style="{{r.style}}">
+          <span style="display: flex; justify-content: space-between; gap: 8px; font-size: 14px; font-weight: 700; color: #f5ebd6"><span>{{r.name}}</span><span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 400; color: {{accent}}">{{r.pct}}</span></span>
+          <span style="display: block; font-size: 12px; color: #9aa8b5; margin-top: 2px">{{r.sub}}</span>
+          <span style="display: block; height: 3px; background: #22364a; border-radius: 2px; margin-top: 8px"><span style="display: block; height: 3px; border-radius: 2px; background: #ff9d3a; width: {{r.pct}}"></span></span>
+        </button>
+      </sc-for>
+      <sc-if value="{{noRows}}" hint-placeholder-val="{{ false }}">
+        <div style="font-size: 13px; color: #9aa8b5; padding: 8px 0">Nothing is moving at this hour in {{placeName}}. Scrub the clock to find a departure.</div>
+      </sc-if>
+    </section>
+  </div>
+
+  <!-- MAP COLUMN -->
+  <div style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 12px">
+    <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px">
+      <nav aria-label="Camera level" style="display: flex; gap: 4px; font-size: 12px">
+        <span style="border: 1px solid #22364a; border-radius: 6px; padding: 6px 12px; color: #9aa8b5">World · globe</span>
+        <span style="border: 1px solid #ff9d3a; background: #ff9d3a; color: #1a1208; font-weight: 700; border-radius: 6px; padding: 6px 12px">Region · {{placeName}}</span>
+        <span style="border: 1px solid #22364a; border-radius: 6px; padding: 6px 12px; color: #9aa8b5">Journey · 3D terrain</span>
+      </nav>
+      <div style="font-size: 12px; color: #9aa8b5">Click a pulsing dot to dive into its journey</div>
+    </div>
+
+    <div style="width: 100%; max-width: 860px; margin: 0 auto; aspect-ratio: 1 / 1; position: relative; background: #07111a; border: 1px solid #22364a; border-radius: 12px; overflow: hidden">
+      <svg viewBox="0 0 850 850" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style="position: absolute; inset: 0" aria-hidden="true">
+        <defs><filter id="terrain" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.006 0.01" numOctaves="4" seed="7"/><feColorMatrix type="matrix" values="0 0 0 0 0.04  0 0 0 0 0.07  0 0 0 0 0.05  0 0 0 1.3 -0.3"/></filter></defs>
+        <rect width="850" height="850" fill="{{landFill}}"/>
+        <rect width="850" height="850" filter="url(#terrain)" opacity=".7"/>
+        <path d="M85,0V850M255,0V850M425,0V850M595,0V850M765,0V850M0,85H850M0,255H850M0,425H850M0,595H850M0,765H850" stroke="#ffffff" stroke-opacity=".07" stroke-width="1" fill="none"/>
+        <path d="{{routesPath}}" fill="none" stroke="#f5ebd6" stroke-opacity=".4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="{{selPath}}" fill="none" stroke="#ff9d3a" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+
+      <div style="position: absolute; left: 12px; bottom: 10px; font-size: 11px; color: #9aa8b5; background: rgba(8,19,29,.8); padding: 4px 8px; border-radius: 6px">Stylised stand-in · global satellite imagery loads here in the app</div>
+
+      <div style="position: absolute; top: 12px; right: 12px; display: flex; flex-direction: column; gap: 6px; align-items: center">
+        <button type="button" aria-label="Zoom out to the globe" style="width: 56px; height: 56px; border-radius: 50%; border: 1px solid #ff9d3a; background: rgba(13,26,38,.9); color: #f5ebd6; font-size: 11px; cursor: pointer">Globe</button>
+        <button type="button" aria-label="Zoom in" style="width: 44px; height: 44px; border-radius: 8px; border: 1px solid #22364a; background: rgba(13,26,38,.9); color: #f5ebd6; font-size: 20px; cursor: pointer">+</button>
+        <button type="button" aria-label="Zoom out" style="width: 44px; height: 44px; border-radius: 8px; border: 1px solid #22364a; background: rgba(13,26,38,.9); color: #f5ebd6; font-size: 20px; cursor: pointer">−</button>
+      </div>
+
+      <sc-for list="{{dots}}" as="d" hint-placeholder-count="4">
+        <button type="button" onClick="{{d.pick}}" aria-label="{{d.aria}}" style="{{d.btnStyle}}">
+          <span class="{{d.haloClass}}"></span>
+          <span style="{{d.coreStyle}}"></span>
+          <span style="{{d.labelStyle}}">{{d.label}}</span>
+        </button>
+      </sc-for>
+
+      <sc-for list="{{stops}}" as="st" hint-placeholder-count="4">
+        <span style="{{st.style}}">{{st.name}}</span>
+      </sc-for>
+    </div>
+
+    <section style="max-width: 860px; width: 100%; margin: 0 auto; box-sizing: border-box; background: rgba(13,26,38,.88); border: 1px solid #22364a; border-radius: 12px; padding: 16px 20px; display: flex; flex-direction: column; gap: 6px">
+      <div style="font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: #9aa8b5">Sources &amp; method · {{selName}}</div>
+      <div style="font-size: 13px; line-height: 1.55; color: #ede4d3">{{selSchedule}}</div>
+      <div style="font-size: 12px; line-height: 1.55; color: #9aa8b5">Route: {{selGeometry}} · Source: {{selSource}}</div>
+      <div style="font-size: 12px; line-height: 1.55; color: #9aa8b5">Positions are scheduled, never tracked: a service running late is still drawn on time here. Imagery: Sentinel-2 cloudless © EOX IT Services GmbH (CC-BY 4.0), imagery courtesy NASA GIBS / ESDIS, terrain © Mapzen / Amazon AWS, route geometry © OpenStreetMap contributors (ODbL).</div>
+    </section>
+  </div>
+</div>
+</x-dc>
+
+
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#ff9d3a","options":["#ff9d3a","#f2c45a","#7fd1b9","#e8876b"]},"$preview":{"width":1440,"height":1000}}'>
+const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const DAY_FULL = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const SPEEDS = [1, 5, 20];
+
+/* The place registry. Everything place-specific lives here: bounds, timezone, season curve, journeys.
+   Path points are [lon, lat, optional stop name]. Times are minutes after local midnight.
+   Sample data only: every timetable and walk window is a placeholder until a sourced one is typed in. */
+const PLACES = [
+  {
+    id: 'sw-india', label: 'South-west India', name: 'South-west India', tz: 'Asia/Kolkata', tzLabel: 'IST',
+    bounds: [72.0, 10.2, 81.0, 19.6], peak: 7.5, peakNote: 'monsoon: the Ghats turn green', dryNote: 'pre-monsoon: dry and brown', dryMonths: [2, 4], wetMonths: [5, 8],
+    journeys: [
+      { id: 'konkan-railway', kind: 'service', name: '10111 Mumbai CST → Mangaluru', short: '10111', geometry: 'surveyed (OpenRailwayMap)', source: '[TIMETABLE SOURCE LINK]',
+        path: [[72.835,18.940,'Mumbai CST'],[73.12,18.43,'Roha'],[73.51,17.53,'Chiplun'],[73.30,16.99,'Ratnagiri'],[73.95,15.27,'Madgaon'],[74.12,14.81,'Karwar'],[74.75,13.34,'Udupi'],[74.84,12.87,'Mangaluru']],
+        halts: [{ i: 0, dep: 425 }, { i: 3, arr: 710, dep: 715, name: 'Ratnagiri' }, { i: 7, arr: 1295 }] },
+      { id: 'tirupati-tirumala', kind: 'window', name: 'Alipiri → Tirumala footpath', short: 'Tirumala', geometry: 'approximate, drawn straight between halts', source: '[SOURCE LINK, e.g. temple footpath hours]',
+        path: [[79.4192,13.6288,'Tirupati'],[79.3474,13.6833]], window: { open: 240, close: 1320, n: 7, walk: 240 } },
+      { id: 'yadagirigutta', kind: 'window', name: 'Yadagiri Hill ghat road', short: 'Yadagiri', geometry: 'approximate, drawn straight between halts', source: '[SOURCE LINK, e.g. temple footpath hours]',
+        path: [[78.94,17.59,'Yadagiri'],[78.95,17.60]], window: { open: 360, close: 1230, n: 4, walk: 90 } },
+      { id: 'srirangam-trichy', kind: 'window', name: 'Srirangam → Trichy river path', short: 'Srirangam', geometry: 'approximate, drawn straight between halts', source: '[SOURCE LINK, e.g. temple footpath hours]',
+        path: [[78.69,10.86,'Srirangam'],[78.70,10.81]], window: { open: 360, close: 1200, n: 3, walk: 120 } }
+    ]
+  },
+  {
+    id: 'alps', label: 'Swiss Alps', name: 'Swiss Alps', tz: 'Europe/Zurich', tzLabel: 'CET/CEST',
+    bounds: [7.4, 46.5, 10.1, 47.7], peak: 6.5, peakNote: 'summer: alpine meadows at full green', dryNote: 'snow still on the high passes', dryMonths: [0, 3], wetMonths: [5, 8],
+    journeys: [
+      { id: 'zurich-chur', kind: 'service', name: 'Zürich HB → Chur', short: 'ZH–Chur', geometry: 'surveyed (OpenStreetMap)', source: '[TIMETABLE SOURCE LINK]',
+        path: [[8.540,47.378,'Zürich HB'],[8.80,47.22],[9.440,47.049,'Sargans'],[9.529,46.853,'Chur']],
+        halts: [{ i: 0, dep: 422 }, { i: 2, arr: 495, dep: 497, name: 'Sargans' }, { i: 3, arr: 520 }] },
+      { id: 'uetliberg-trail', kind: 'window', name: 'Uetliberg ridge trail', short: 'Uetliberg', geometry: 'approximate, drawn straight between halts', source: '[SOURCE LINK, trail authority]',
+        path: [[8.4906,47.3499,'Uetliberg'],[8.5510,47.3600]], window: { open: 480, close: 1080, n: 5, walk: 100 } }
+    ]
+  },
+  {
+    id: 'camino', label: 'Camino, Galicia', name: 'Camino, Galicia', tz: 'Europe/Madrid', tzLabel: 'CET/CEST',
+    bounds: [-8.8, 42.6, -7.0, 43.1], peak: 4.5, peakNote: 'spring: green Galician hills', dryNote: 'a drier, golden summer', dryMonths: [6, 8], wetMonths: [3, 5],
+    journeys: [
+      { id: 'sarria-portomarin', kind: 'window', name: 'Sarria → Portomarín stage', short: 'Sarria', geometry: 'approximate, drawn straight between halts', source: '[SOURCE LINK, pilgrim office stage guide]',
+        path: [[-7.414,42.777,'Sarria'],[-7.616,42.807,'Portomarín']], window: { open: 360, close: 1200, n: 6, walk: 360 } },
+      { id: 'monte-gozo', kind: 'window', name: 'Monte do Gozo → Santiago', short: 'Monte do Gozo', geometry: 'approximate, drawn straight between halts', source: '[SOURCE LINK, pilgrim office stage guide]',
+        path: [[-8.4947,42.8918,'Monte do Gozo'],[-8.5446,42.8806,'Santiago']], window: { open: 420, close: 1260, n: 4, walk: 90 } }
+    ]
+  }
+];
+
+function pad(n) { return String(Math.floor(n)).padStart(2, '0'); }
+function fmt(min) { return pad(min / 60) + ':' + pad(min % 60); }
+function placeNow(tz) {
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', second: '2-digit', weekday: 'short', month: 'numeric', hourCycle: 'h23' }).formatToParts(new Date());
+  const g = (k) => parts.find((p) => p.type === k).value;
+  return { t: Number(g('hour')) * 60 + Number(g('minute')) + Number(g('second')) / 60, day: Math.max(0, DAYS.indexOf(g('weekday'))), month: Number(g('month')) - 1 };
+}
+function mix(a, b, k) { return 'rgb(' + a.map((v, i) => Math.round(v + (b[i] - v) * k)).join(',') + ')'; }
+function bell(m, peak) { return 0.25 + 0.75 * Math.exp(-Math.pow(m - peak, 2) / (2 * 2.2 * 2.2)); }
+
+function projector(b) {
+  const midLon = (b[0] + b[2]) / 2, midLat = (b[1] + b[3]) / 2, kx = Math.cos(midLat * Math.PI / 180);
+  const scale = 690 / Math.max((b[2] - b[0]) * kx, b[3] - b[1]);
+  return (p) => [425 + (p[0] - midLon) * kx * scale, 425 - (p[1] - midLat) * scale];
+}
+function pathLens(pts) {
+  const l = [0];
+  for (let i = 1; i < pts.length; i++) l.push(l[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  return l;
+}
+function pointAt(pts, lens, d) {
+  let s = 0; while (s < lens.length - 2 && lens[s + 1] < d) s++;
+  const f = lens[s + 1] === lens[s] ? 0 : (d - lens[s]) / (lens[s + 1] - lens[s]);
+  return [pts[s][0] + (pts[s + 1][0] - pts[s][0]) * f, pts[s][1] + (pts[s + 1][1] - pts[s][1]) * f, s, lens.reduce((a, v, i) => (v <= d + 0.01 ? i : a), 0)];
+}
+/* Engine, place-agnostic. A service interpolates by distance between halts; a window runs evenly spaced departures. */
+function serviceAt(j, pts, lens, t) {
+  const H = j.halts, last = H[H.length - 1], first = H[0];
+  const total = lens[lens.length - 1];
+  let dist, state;
+  if (t < first.dep) { dist = 0; state = 'before'; }
+  else if (t >= last.arr) { dist = total; state = 'arrived'; }
+  else {
+    state = 'moving'; dist = total;
+    for (let k = 0; k < H.length - 1; k++) {
+      const a = H[k], b = H[k + 1];
+      if (t >= a.dep && t < b.arr) { dist = lens[a.i] + (t - a.dep) / (b.arr - a.dep) * (lens[b.i] - lens[a.i]); break; }
+      if (t >= b.arr && t < b.dep) { dist = lens[b.i]; state = 'held'; break; }
+    }
+  }
+  return { dist, state, pct: Math.round(dist / total * 100) };
+}
+function windowAt(w, t) {
+  const latest = w.close - w.walk;
+  if (w.n <= 0 || latest < w.open) return { list: [], next: null };
+  const step = w.n > 1 ? (latest - w.open) / (w.n - 1) : 0;
+  const list = []; let next = null;
+  for (let i = 0; i < w.n; i++) {
+    const s = w.open + i * step;
+    if (t >= s && t < s + w.walk) list.push((t - s) / w.walk);
+    else if (s > t && next === null) next = s;
+  }
+  return { list, next };
+}
+
+class Component extends DCLogic {
+  state = { ...placeNow(PLACES[0].tz), placeId: PLACES[0].id, live: true, playing: false, speed: 5, filter: 'moving', sel: PLACES[0].journeys[0].id, mode: 'season', seasonIdx: 15 };
+
+  componentDidMount() {
+    this.timer = setInterval(() => {
+      const S = this.state;
+      if (S.live) { const n = placeNow(this.place().tz); this.setState({ t: n.t, day: n.day }); return; }
+      if (!S.playing) return;
+      let t = S.t + S.speed / 10, day = S.day;
+      if (t >= 1440) { t -= 1440; day = (day + 1) % 7; }
+      this.setState({ t, day });
+    }, 100);
+  }
+  componentWillUnmount() { clearInterval(this.timer); }
+  place() { return PLACES.find((p) => p.id === this.state.placeId) || PLACES[0]; }
+
+  renderVals() {
+    const S = this.state;
+    const P = this.place();
+    const accent = this.props.accent ?? '#ff9d3a';
+    const t = S.t;
+    const chip = (on) => 'min-height: 44px; padding: 0 14px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; border: 1px solid ' + (on ? accent : '#22364a') + '; background: ' + (on ? accent : 'transparent') + '; color: ' + (on ? '#1a1208' : '#ede4d3');
+    const proj = projector(P.bounds);
+    const night = S.mode === 'night';
+
+    const journeys = P.journeys.map((j) => {
+      const pts = j.path.map(proj), lens = pathLens(pts);
+      let pos, moving, count, pct, sub, label;
+      if (j.kind === 'service') {
+        const r = serviceAt(j, pts, lens, t), q = pointAt(pts, lens, r.dist);
+        const H = j.halts, first = H[0], lastH = H[H.length - 1];
+        pos = [q[0], q[1]]; moving = r.state === 'moving' || r.state === 'held'; count = moving ? 1 : 0; pct = r.pct;
+        const nm = (k) => { for (let i = k; i >= 0; i--) { if (j.path[i][2]) return j.path[i][2]; } return j.short; };
+        const held = H.find((h) => h.arr !== undefined && h.dep !== undefined && t >= h.arr && t < h.dep);
+        const passed = lens.reduce((a, v, i) => (v <= r.dist + 0.01 ? i : a), 0);
+        sub = r.state === 'before' ? 'departs ' + nm(0) + ' ' + fmt(first.dep)
+          : r.state === 'arrived' ? 'arrived ' + nm(lastH.i) + ' ' + fmt(lastH.arr)
+          : r.state === 'held' ? 'standing at ' + nm(held.i) + ' · dep ' + fmt(held.dep)
+          : fmt(first.dep) + ' → ' + fmt(lastH.arr) + ' · past ' + nm(passed);
+        label = moving ? j.short + ' · ' + pct + '%' : j.short;
+      } else {
+        const m = windowAt(j.window, t), c = m.list.length, avg = c ? m.list.reduce((a, b) => a + b, 0) / c : 0;
+        pos = pts[0]; moving = c > 0; count = c; pct = Math.round(avg * 100);
+        sub = c ? 'walk window ' + fmt(j.window.open) + '–' + fmt(j.window.close) + ' · ' + c + ' on the path (sample)'
+          : (m.next !== null ? 'next departure ' + fmt(m.next) : (t < j.window.open ? 'opens ' + fmt(j.window.open) : 'closed for the day'));
+        label = c ? j.short + ' · ' + c + ' walking' : j.short;
+      }
+      return { j, pts, pos, moving, count, pct, sub, label };
+    });
+
+    const sel = journeys.find((x) => x.j.id === S.sel) || journeys[0];
+    const dstr = (pts) => 'M' + pts.map((p) => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join('L');
+
+    const rows = journeys.filter((x) => S.filter === 'all' || x.moving).map((x) => ({
+      name: x.j.name, sub: x.sub, pct: x.pct + '%', on: sel.j.id === x.j.id,
+      style: 'text-align: left; cursor: pointer; font-family: inherit; color: inherit; width: 100%; box-sizing: border-box; padding: 12px; min-height: 44px; border-radius: 8px; background: ' + (sel.j.id === x.j.id ? 'rgba(255,157,58,.08)' : 'transparent') + '; border: 1px solid ' + (sel.j.id === x.j.id ? accent : '#22364a'),
+      pick: () => this.setState({ sel: x.j.id })
+    }));
+
+    const dots = journeys.map((x) => {
+      const on = sel.j.id === x.j.id, left = x.pos[0] > 560;
+      return {
+        aria: x.j.name + ', ' + x.sub, label: x.label, haloClass: x.moving ? 'halo pulse' : 'halo',
+        btnStyle: 'position: absolute; left: ' + (x.pos[0] / 8.5).toFixed(2) + '%; top: ' + (x.pos[1] / 8.5).toFixed(2) + '%; width: 44px; height: 44px; margin: -22px 0 0 -22px; padding: 0; border: none; background: transparent; cursor: pointer; z-index: ' + (on ? 3 : 2),
+        coreStyle: 'position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; box-sizing: border-box; border-radius: 50%; background: ' + (x.moving ? accent : '#0d1a26') + '; border: 2px solid #f5ebd6; box-shadow: 0 0 ' + (night && x.moving ? 22 : (on ? 10 : 0)) + 'px ' + (night ? 6 : 2) + 'px ' + accent,
+        labelStyle: 'position: absolute; top: 50%; transform: translateY(-50%); white-space: nowrap; pointer-events: none; font-size: 11px; color: #f5ebd6; background: rgba(8,19,29,.85); padding: 2px 6px; border-radius: 4px; ' + (left ? 'right: 38px' : 'left: 38px'),
+        pick: () => this.setState({ sel: x.j.id })
+      };
+    });
+
+    /* Named stops: every path point that carries a name, for orientation. */
+    const stops = [];
+    journeys.forEach((x) => x.j.path.forEach((p, k) => { if (p[2] && x.j.kind === 'service' && (k === 0 || k === x.j.path.length - 1)) { const q = x.pts[k]; stops.push({ name: p[2], style: 'position: absolute; left: ' + (q[0] / 8.5).toFixed(2) + '%; top: ' + (q[1] / 8.5).toFixed(2) + '%; font-size: 11px; color: #9aa8b5; transform: translate(' + (q[0] > 560 ? '-112%' : '12px') + ', 8px)' }); } }));
+
+    const m = S.seasonIdx / 2, mi = Math.floor(m);
+    const brown = [107, 90, 62], leaf = [58, 104, 58];
+    const landFill = night ? '#0a1118' : S.mode === 'today' ? mix(brown, leaf, bell(placeNow(P.tz).month + 0.3, P.peak)) : mix(brown, leaf, bell(m, P.peak));
+    const wet = mi >= P.wetMonths[0] && mi <= P.wetMonths[1], dry = mi >= P.dryMonths[0] && mi <= P.dryMonths[1];
+    const nSvc = P.journeys.filter((j) => j.kind === 'service').length, nWin = P.journeys.length - nSvc;
+    const w = sel.j;
+    const selSchedule = w.kind === 'service'
+      ? 'Timetabled service: ' + w.halts.map((h, k) => (w.path[h.i][2] || h.name || 'halt') + ' ' + fmt(k === 0 ? h.dep : h.arr)).join(' → ') + '. Position is interpolated by distance between halts.'
+      : 'Walk window ' + fmt(w.window.open) + '–' + fmt(w.window.close) + ', ' + w.window.n + ' departures a day, each taking about ' + (w.window.walk >= 120 ? Math.round(w.window.walk / 60) + ' h' : w.window.walk + ' min') + '. Counts are a sample, not a head count.';
+    const n0 = placeNow(P.tz);
+
+    return {
+      accent, placeName: P.name, tzLabel: P.tzLabel, totalCount: P.journeys.length,
+      placeSummary: P.name + ' · ' + P.journeys.length + ' journeys · ' + nSvc + ' timetabled service' + (nSvc === 1 ? '' : 's') + ' · ' + nWin + ' walking path' + (nWin === 1 ? '' : 's') + '. Every position is read off a schedule.',
+      places: PLACES.map((p) => ({ label: p.label, on: p.id === P.id, style: chip(p.id === P.id), pick: () => this.setState({ placeId: p.id, sel: p.journeys[0].id, live: true, playing: false, filter: 'all', ...placeNow(p.tz) }) })),
+      clockHM: pad(t / 60) + ':' + pad(t % 60), clockS: pad((t * 60) % 60),
+      dayName: DAY_FULL[S.day], movingCount: journeys.reduce((a, x) => a + x.count, 0),
+      tInt: Math.floor(t), live: S.live,
+      onScrub: (e) => this.setState({ t: Number(e.target.value), live: false, playing: false }),
+      days: DAYS.map((label, i) => ({ label, on: S.day === i, style: chip(S.day === i), pick: () => this.setState({ day: i, live: false }) })),
+      speeds: SPEEDS.map((v) => ({ label: v + 'm', on: S.speed === v, style: chip(S.speed === v), pick: () => this.setState({ speed: v, live: false, playing: true }) })),
+      playLabel: S.playing && !S.live ? '❚❚ Pause' : '▶ Play the day',
+      playStyle: chip(S.playing && !S.live),
+      togglePlay: () => this.setState({ playing: !(S.playing && !S.live), live: false }),
+      liveStyle: chip(S.live),
+      goLive: () => this.setState({ live: true, playing: false, t: n0.t, day: n0.day }),
+      modes: [['season', 'Season'], ['night', 'Night'], ['today', 'Today']].map(([id, label]) => ({ label, on: S.mode === id, style: chip(S.mode === id), pick: () => this.setState({ mode: id }) })),
+      isSeason: S.mode === 'season', notSeason: S.mode !== 'season',
+      layerCaption: S.mode === 'season' ? 'NASA GIBS seasonal composite' : night ? 'NASA GIBS VIIRS night lights' : 'NASA GIBS true colour, today',
+      modeNote: night ? 'VIIRS day/night band, a daily product: in Night the calendar snaps to days. Festival nights and holiday lights show here.' : 'Daily true colour, current date only. Cloudy seasons are mostly cloud in daily imagery, so the scrubbable year uses cloud-free composites instead.',
+      landFill, seasonIdx: S.seasonIdx,
+      onSeason: (e) => this.setState({ seasonIdx: Number(e.target.value) }),
+      seasonLabel: (S.seasonIdx % 2 ? 'Late ' : 'Early ') + MONTHS[mi],
+      seasonNote: wet ? '· ' + P.peakNote : (dry ? '· ' + P.dryNote : '· 16-day composite'),
+      rows, noRows: rows.length === 0,
+      filterMoving: S.filter === 'moving', filterAll: S.filter === 'all',
+      fMovingStyle: chip(S.filter === 'moving'), fAllStyle: chip(S.filter === 'all'),
+      showMoving: () => this.setState({ filter: 'moving' }), showAll: () => this.setState({ filter: 'all' }),
+      dots, stops,
+      routesPath: journeys.map((x) => dstr(x.pts)).join(''), selPath: dstr(sel.pts),
+      selName: w.name, selSchedule, selGeometry: w.geometry, selSource: w.source
+    };
+  }
+}
+</script>
+</body>
+</html>
