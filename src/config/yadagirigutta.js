@@ -21,6 +21,11 @@ const config = {
       color: "#8a4528",
       difficulty: "Moderate",
       stats: { distanceKm: 3.0, durationHr: 1.0 },
+      schedule: {
+        kind: "window", tz: "Asia/Kolkata",
+        open: "06:00", close: "20:30", paceKmh: 3, departuresPerDay: 4,
+        source: { name: "PLACEHOLDER — replace with a sourced listing (see docs/designs/yatra-living-atlas.md, Open Question 3)", url: null },
+      },
       waypoints: [
         { lat: 17.5970, lon: 78.9450, elev: 470 },  // Town base — Yadagirigutta bus stand
         { lat: 17.5978, lon: 78.9458, elev: 490 },  // Foothill — climb begins

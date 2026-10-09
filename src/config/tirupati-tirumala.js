@@ -19,6 +19,12 @@ const config = {
       color: "#3b82f6",
       difficulty: "Moderate",
       stats: { distanceKm: 11, steps: 3550, durationHr: 4 },
+      // Living Atlas: walk window, sample departures spaced evenly through the day.
+      schedule: {
+        kind: "window", tz: "Asia/Kolkata",
+        open: "04:00", close: "22:00", paceKmh: 3, departuresPerDay: 7,
+        source: { name: "PLACEHOLDER — replace with a sourced listing (see docs/designs/yatra-living-atlas.md, Open Question 3)", url: null },
+      },
       waypoints: [
         { lat: 13.6288, lon: 79.4192, elev: 182 },
         { lat: 13.6371, lon: 79.4015, elev: 220 },

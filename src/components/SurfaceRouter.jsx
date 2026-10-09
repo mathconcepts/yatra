@@ -11,9 +11,10 @@ const Memories = lazy(() => import("./memories/MemoryGallery.jsx"));
 const Compare = lazy(() => import("./compare/CompareView.jsx"));
 const Director = lazy(() => import("./director/DirectorView.jsx"));
 const Settings = lazy(() => import("./settings/SettingsView.jsx"));
+const LivingAtlas = lazy(() => import("./living/LivingAtlas.jsx"));
 
 const STORAGE_KEY = "yatra.surface";
-const VALID_SURFACES = ["atlas", "reels", "composer", "memories", "compare", "director", "settings"];
+const VALID_SURFACES = ["atlas", "reels", "composer", "memories", "compare", "director", "settings", "living-atlas"];
 
 /**
  * Pure decision: pick the right surface for a viewport.
@@ -147,6 +148,14 @@ export default function SurfaceRouter({ atlas, locationId, locations, atlasConfi
     );
   }
 
+  if (surface === "living-atlas") {
+    return (
+      <Suspense fallback={<div className="jm-loading" role="status">Loading…</div>}>
+        <LivingAtlas locations={locations} onCancel={() => switchSurface("atlas")} />
+      </Suspense>
+    );
+  }
+
   if (surface === "settings") {
     return (
       <Suspense fallback={<div className="jm-loading" role="status">Loading…</div>}>
@@ -200,6 +209,14 @@ export default function SurfaceRouter({ atlas, locationId, locations, atlasConfi
           aria-label="Compare two journeys"
         >
           Compare
+        </button>
+        <button
+          type="button"
+          className="jm-surface-toggle"
+          onClick={() => switchSurface("living-atlas")}
+          aria-label="Open the Living Atlas"
+        >
+          Living Atlas
         </button>
         <button
           type="button"

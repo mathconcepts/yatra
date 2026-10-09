@@ -60,6 +60,27 @@
  * @property {Object}  stats       { distanceKm, steps?, durationHr }
  * @property {Place[]} waypoints   ordered list (start → end)
  *
+ * @property {Schedule} [schedule]  Living Atlas: when things move on this route.
+ * @property {"surveyed"|"approximate"} [geometry]  how the line was drawn;
+ *           absent means "approximate" ("drawn straight between halts").
+ *
+ * @typedef {Object} Schedule
+ * @property {"timetable"|"window"} kind
+ * @property {string} tz            IANA zone the times are written in
+ * @property {{name:string,url:string|null}} source   provenance, shown as-is
+ * timetable: one timetabled run.
+ * @property {string[]} [days]      running days ("Mon".."Sun"); absent = daily
+ * @property {Halt[]}   [halts]     ordered; times past midnight roll over
+ * window: evenly spaced walks between two clock times.
+ * @property {string} [open]        "HH:MM"   @property {string} [close]
+ * @property {number} [paceKmh]     walking pace over the route's length
+ * @property {number} [departuresPerDay]
+ *
+ * @typedef {Object} Halt  bound to the route by exactly one of:
+ * @property {string} [landmark]    landmark id, must be within 300 m of the route
+ * @property {"start"|"end"} [at]   the route's own endpoints
+ * @property {string} [arr]  @property {string} [dep]   "HH:MM"
+ *
  * @typedef {Object} Landmark
  * @property {string} id
  * @property {string} name

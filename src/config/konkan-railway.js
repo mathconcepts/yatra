@@ -22,6 +22,18 @@ const config = {
       color: "#0066aa",
       difficulty: "Easy",
       stats: { distanceKm: 738, durationHr: 14.5 },
+      // Surveyed OSM track geometry is a later import (TODOS); until then the
+      // line is drawn between halts and says so in the Sources line.
+      schedule: {
+        kind: "timetable", tz: "Asia/Kolkata",
+        days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+        halts: [
+          { at: "start", dep: "07:05" },
+          { landmark: "ratnagiri", arr: "11:50", dep: "11:55" },
+          { at: "end", arr: "21:35" },
+        ],
+        source: { name: "PLACEHOLDER — replace with a sourced listing (see docs/designs/yatra-living-atlas.md, Open Question 3)", url: null },
+      },
       // Hand-picked waypoints from the Konkan Railway timetable — major
       // stations + Western Ghats crossings. Real-rail-geometry import
       // from OpenRailwayMap (ODbL, attribution committed in
